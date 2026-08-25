@@ -46,7 +46,6 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
-    "@payloadcms/db-mongodb": "3.84.1",
     "@payloadcms/db-postgres": "3.84.1",
     "@payloadcms/db-sqlite": "3.84.1",
     "@payloadcms/eslint-config": "3.28.0",
@@ -64,7 +63,6 @@
     "eslint": "^9.23.0",
     "eslint-config-next": "16.3.0",
     "graphql": "^16.8.1",
-    "mongodb-memory-server": "10.1.4",
     "next": "16.3.0",
     "open": "^10.1.0",
     "payload": "3.84.1",
@@ -114,6 +112,5 @@
       "unrs-resolver"
     ]
   },
-  "registry": "https://registry.npmjs.org/",
-  "dependencies": {}
+  "registry": "https://registry.npmjs.org/"
 }

@@ -9,6 +9,7 @@ export const defaultESLintIgnores = [
   '**/.hg',
   '**/.pnp.*',
   '**/.svn',
+  '**/.next/**',
   '**/playwright.config.ts',
   '**/vitest.config.js',
   '**/tsconfig.tsbuildinfo',
@@ -23,6 +24,9 @@ export const defaultESLintIgnores = [
 ]
 
 export default [
+  {
+    ignores: defaultESLintIgnores,
+  },
   ...payloadEsLintConfig,
   {
     rules: {
