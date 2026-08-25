@@ -1,10 +1,10 @@
-import type { Payload } from 'payload'
+import type { Config, Payload } from 'payload'
 
 import config from '@payload-config'
-import { createPayloadRequest, getPayload } from 'payload'
+import { getPayload } from 'payload'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import { customEndpointHandler } from '../src/endpoints/customEndpointHandler.js'
+import { payloadSimpleSocialLogin } from '../src/index.js'
 
 let payload: Payload
 
@@ -17,36 +17,38 @@ beforeAll(async () => {
 })
 
 describe('Plugin integration tests', () => {
-  test('should query custom endpoint added by plugin', async () => {
-    const request = new Request('http://localhost:3000/api/my-plugin-endpoint', {
-      method: 'GET',
-    })
-
-    const payloadRequest = await createPayloadRequest({ config, request })
-    const response = await customEndpointHandler(payloadRequest)
-    expect(response.status).toBe(200)
-
-    const data = await response.json()
-    expect(data).toMatchObject({
-      message: 'Hello from custom endpoint',
-    })
+  test('plugin loads with the Payload config', () => {
+    expect(payload).toBeDefined()
+    expect(payload.collections['users']).toBeDefined()
+    expect(payload.collections['plugin-collection']).toBeUndefined()
   })
 
-  test('can create post with custom text field added by plugin', async () => {
-    const post = await payload.create({
-      collection: 'posts',
-      data: {
-        addedByPlugin: 'added by plugin',
-      },
-    })
-    expect(post.addedByPlugin).toBe('added by plugin')
+  test('disabled plugin returns config unchanged for endpoints', () => {
+    const baseConfig = {
+      collections: [],
+      endpoints: [{ handler: () => Response.json({}), method: 'get', path: '/existing' }],
+      secret: 'test',
+    } as unknown as Config
+
+    const next = payloadSimpleSocialLogin({
+      disabled: true,
+      providers: {},
+    })(baseConfig)
+
+    expect(next.endpoints).toEqual(baseConfig.endpoints)
   })
 
-  test('plugin creates and seeds plugin-collection', async () => {
-    expect(payload.collections['plugin-collection']).toBeDefined()
+  test('enabled plugin keeps endpoints array scaffold', () => {
+    const baseConfig = {
+      collections: [],
+      secret: 'test',
+    } as unknown as Config
 
-    const { docs } = await payload.find({ collection: 'plugin-collection' })
+    const next = payloadSimpleSocialLogin({
+      providers: {},
+    })(baseConfig)
 
-    expect(docs).toHaveLength(1)
+    expect(Array.isArray(next.endpoints)).toBe(true)
+    expect(next.endpoints).toHaveLength(0)
   })
 })

@@ -1,113 +1,30 @@
-import type { CollectionSlug, Config } from 'payload'
+import type { Config } from 'payload'
 
-import { customEndpointHandler } from './endpoints/customEndpointHandler.js'
+import type { PayloadSimpleSocialLoginConfig } from './types.js'
 
-export type PayloadSimpleSocialLoginConfig = {
-  /**
-   * List of collections to add a custom field
-   */
-  collections?: Partial<Record<CollectionSlug, true>>
-  disabled?: boolean
-}
+export type {
+  CollectionSocialLoginConfig,
+  FindUserCallback,
+  FindUserCallbackArgs,
+  GoogleProviderConfig,
+  MicrosoftProviderConfig,
+  PayloadSimpleSocialLoginConfig,
+  SocialProviderId
+} from './types.js'
 
 export const payloadSimpleSocialLogin =
   (pluginOptions: PayloadSimpleSocialLoginConfig) =>
   (config: Config): Config => {
-    if (!config.collections) {
-      config.collections = []
-    }
-
-    config.collections.push({
-      slug: 'plugin-collection',
-      fields: [
-        {
-          name: 'id',
-          type: 'text',
-        },
-      ],
-    })
-
-    if (pluginOptions.collections) {
-      for (const collectionSlug in pluginOptions.collections) {
-        const collection = config.collections.find(
-          (collection) => collection.slug === collectionSlug,
-        )
-
-        if (collection) {
-          collection.fields.push({
-            name: 'addedByPlugin',
-            type: 'text',
-            admin: {
-              position: 'sidebar',
-            },
-          })
-        }
-      }
-    }
-
     /**
-     * If the plugin is disabled, we still want to keep added collections/fields so the database schema is consistent which is important for migrations.
-     * If your plugin heavily modifies the database schema, you may want to remove this property.
+     * Keep schema-affecting changes outside this early return if added later.
+     * For now the plugin only registers runtime pieces (endpoints / UI).
      */
     if (pluginOptions.disabled) {
       return config
     }
 
-    if (!config.endpoints) {
-      config.endpoints = []
-    }
-
-    if (!config.admin) {
-      config.admin = {}
-    }
-
-    if (!config.admin.components) {
-      config.admin.components = {}
-    }
-
-    if (!config.admin.components.beforeDashboard) {
-      config.admin.components.beforeDashboard = []
-    }
-
-    config.admin.components.beforeDashboard.push(
-      `payload-simple-social-login/client#BeforeDashboardClient`,
-    )
-    config.admin.components.beforeDashboard.push(
-      `payload-simple-social-login/rsc#BeforeDashboardServer`,
-    )
-
-    config.endpoints.push({
-      handler: customEndpointHandler,
-      method: 'get',
-      path: '/my-plugin-endpoint',
-    })
-
-    const incomingOnInit = config.onInit
-
-    config.onInit = async (payload) => {
-      // Ensure we are executing any existing onInit functions before running our own.
-      if (incomingOnInit) {
-        await incomingOnInit(payload)
-      }
-
-      const { totalDocs } = await payload.count({
-        collection: 'plugin-collection',
-        where: {
-          id: {
-            equals: 'seeded-by-plugin',
-          },
-        },
-      })
-
-      if (totalDocs === 0) {
-        await payload.create({
-          collection: 'plugin-collection',
-          data: {
-            id: 'seeded-by-plugin',
-          },
-        })
-      }
-    }
+    // Generic endpoints scaffold — OAuth handlers will be registered here later.
+    config.endpoints = [...(config.endpoints ?? [])]
 
     return config
   }

@@ -56,9 +56,7 @@ export default buildConfig({
   },
   plugins: [
     payloadSimpleSocialLogin({
-      collections: {
-        posts: true,
-      },
+      providers: {},
     }),
   ],
   secret: process.env.PAYLOAD_SECRET || 'test-secret_key',

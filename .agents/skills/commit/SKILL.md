@@ -10,6 +10,8 @@ disable-model-invocation: true
 
 Creates a standardized commit message from staged files and optionally runs the commit.
 
+**Always validate the commit message with the user before running `git commit`.** Creating `COMMIT_MSG.md` and committing in the same turn is forbidden, even when the user asked to commit up front.
+
 This repository is a Payload plugin. Do **not** expect `docs/ENTITIES.md`, OpenAPI sync, coverage plans, or `yarn`-only scripts from other projects. When unsure about Payload behavior, use `.agents/skills/payload/` (then Payload docs).
 
 ## Steps
@@ -110,13 +112,16 @@ Run **only** if the step 2 failure flag is set:
 
 If the flag is not set, skip to step 11.
 
-### 11. Present and Confirm
+### 11. Present and Confirm (always — never skip)
 
-- Show the full contents of `COMMIT_MSG.md` to the user in the chat (do **not** open it with `cursor`, `code`, or any external editor)
-- Tell the user the message is also in `COMMIT_MSG.md` if they want to edit the file themselves in Cursor
-- Ask: run `git commit -F COMMIT_MSG.md` now? (yes/no)
+**CRITICAL:** Always stop here and wait for the user. Do **not** run `git commit` in the same turn you create `COMMIT_MSG.md`, even if the user already said “commit”, “pode comitar”, “ship it”, or similar.
+
+- Show the **full** contents of `COMMIT_MSG.md` in the chat (do **not** open it with `cursor`, `code`, or any external editor)
+- Tell the user the file is at the repo root if they want to edit it in Cursor
+- Ask explicitly whether the **message** is OK and whether to run `git commit -F COMMIT_MSG.md` now (yes/no)
+- **STOP** until they reply. Only after an explicit yes (e.g. “yes”, “y”, “sim”, “s”) may you commit
 - On **yes**: commit, confirm success, delete `COMMIT_MSG.md`
-- On **no**: leave `COMMIT_MSG.md` for later use
+- On **no** / edit requests: leave or update `COMMIT_MSG.md`; if they edit the message, show it again and re-ask before committing
 
 ## Checklist
 
@@ -126,5 +131,5 @@ If the flag is not set, skip to step 11.
 - [ ] Changes categorized; tag and title chosen
 - [ ] Body written if needed
 - [ ] README updated if setup/scripts changed
-- [ ] `COMMIT_MSG.md` created and shown in chat (not opened via `code`/`cursor` CLI)
-- [ ] User confirmed; commit run; `COMMIT_MSG.md` removed on success
+- [ ] `COMMIT_MSG.md` created and **shown in chat for validation** (never skip; not opened via `code`/`cursor` CLI)
+- [ ] User **explicitly approved the message** after seeing it; only then commit; remove `COMMIT_MSG.md` on success
