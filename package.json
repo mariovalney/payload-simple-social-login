@@ -1,6 +1,6 @@
 {
   "name": "payload-simple-social-login",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Simple social login (Google and Microsoft) for Payload default authentication.",
   "keywords": [
     "payload",

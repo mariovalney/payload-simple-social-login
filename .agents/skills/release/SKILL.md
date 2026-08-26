@@ -93,7 +93,7 @@ Inference heuristics (highest wins):
 
 Compute `inferredVersion` from `packageVersion` (or from `lastTag` if package already matches).
 
-If `[Unreleased]` is empty and there are no meaningful commits since the last tag, say so and ask whether to abort.
+If there is no `[Unreleased]` section (or it is missing after a prior release) and there are no meaningful commits since the last tag, say so and ask whether to abort. Never create an empty `## [Unreleased]` heading.
 
 ### 5. Present inference and STOP (version gate)
 
@@ -122,9 +122,9 @@ After the user has expressly decided `newVersion` (`X.Y.Z`):
 
 1. Set today’s date from user context if available, else `date -u +%Y-%m-%d` (UTC)
 2. Edit [CHANGELOG.md](../../../CHANGELOG.md):
-   - Keep a top `## [Unreleased]` section (empty stub consistent with Keep a Changelog)
-   - Move current Unreleased bullets into `## [newVersion] - YYYY-MM-DD` under the right `### Added` / `### Changed` / `### Fixed` / `### Notes` headings
+   - Move current `[Unreleased]` bullets into `## [newVersion] - YYYY-MM-DD` under the right `### Added` / `### Changed` / `### Fixed` / `### Notes` headings
    - If Unreleased was thin, flesh bullets from `git log` since last tag (user-facing; no internal-only noise)
+   - **Never leave `## [Unreleased]` empty.** After moving notes, remove the Unreleased heading entirely until new work lands. Do not keep a blank Unreleased stub.
    - Add or update footer links:
      - `[newVersion]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v{newVersion}`
      - Keep prior version links
@@ -157,6 +157,6 @@ Do **not** run `git commit` from this skill unless the user explicitly asks afte
 - [ ] Last tag + package version recorded
 - [ ] Next version inferred with SemVer rationale
 - [ ] User **expressly chose** `X.Y.Z` (or major/minor/patch); agent stopped before file writes
-- [ ] Only then: CHANGELOG versioned section + `package.json` bump
+- [ ] Only then: CHANGELOG versioned section + `package.json` bump (no empty Unreleased left behind)
 - [ ] Changelog shown; `/commit` + push suggested
 - [ ] Manual GitHub Release steps listed; no tag / Actions / npm publish by the agent
