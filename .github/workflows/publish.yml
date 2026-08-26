@@ -1,5 +1,9 @@
 name: Publish
 
+# Trusted Publishing (OIDC): https://docs.npmjs.com/trusted-publishers
+# Provenance is automatic with OIDC — no NPM_TOKEN.
+# (The provenance docs example that uses secrets.NPM_TOKEN is the older token-based path.)
+
 on:
   release:
     types: [published]
@@ -8,14 +12,15 @@ concurrency:
   group: publish-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - name: Checkout
@@ -29,9 +34,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Trusted Publishing: Node >= 22.14, npm >= 11.5.1
+          node-version: '22.14'
           registry-url: https://registry.npmjs.org
           cache: pnpm
+          package-manager-cache: false
+
+      - name: Ensure npm CLI for OIDC
+        run: npm install -g npm@11.5.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -51,6 +61,7 @@ jobs:
       - name: Integration tests
         run: pnpm test:int
 
-      # Auth via npm Trusted Publishing (OIDC). No NPM_TOKEN.
+      # OIDC auth — do not set NODE_AUTH_TOKEN (empty token breaks trusted publish).
+      # Provenance is generated automatically with Trusted Publishing.
       - name: Publish
-        run: pnpm publish --access public --provenance --no-git-checks
+        run: npm publish --access public
