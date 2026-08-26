@@ -10,7 +10,7 @@ Releases follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 - **MINOR** — backward-compatible features
 - **PATCH** — backward-compatible bug fixes
 
-Document user-facing changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog style) when cutting a release. Commit messages still use the [commit skill](.agents/skills/commit/SKILL.md) (`/commit`).
+Document user-facing changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog style) when relevant. Commit messages still use the [commit skill](.agents/skills/commit/SKILL.md) (`/commit`).
 
 ## Prerequisites
 
