@@ -19,18 +19,84 @@ Without this step, the `afterLogin` social buttons may not appear in the admin p
 
 ## Configuration
 
-TODO
+```ts
+import { payloadSimpleSocialLogin } from 'payload-simple-social-login'
+
+export default buildConfig({
+  // ...
+  plugins: [
+    payloadSimpleSocialLogin({
+      providers: {
+        google: {
+          clientId: process.env.GOOGLE_CLIENT_ID!,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        },
+        microsoft: {
+          clientId: process.env.MICROSOFT_CLIENT_ID!,
+          clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+          // tenant: 'common', // default
+        },
+      },
+      // Optional. When omitted, defaults to [{ collection: admin.user }] with email match.
+      // collections: [{ collection: 'users' }],
+      showButtonOnLogin: true,
+    }),
+  ],
+})
+```
+
+### Finding users
+
+After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each collection’s `findUserCallback` (or the default email match). The first returned user is logged in (JWT cookie) and the browser is redirected to the admin panel. If none match → `/admin/login?ssl-error=not-found`.
+
+| Arg | Google | Microsoft |
+| --- | --- | --- |
+| `profileId` | `sub` | `id` |
+| `profileEmail` | `email` | `mail ?? userPrincipalName` |
+
+**This plugin never auto-creates users** and will not add a built-in create path. Payload has no standardized way to create auth users (required fields, password, verify, roles, tenants, hooks differ per app). Provisioning belongs in your `findUserCallback` if you want it.
+
+**Link / unlink of OAuth accounts is also out of scope.** If you need that, model your own collection (e.g. `oauth-accounts` with `provider`, `profileId`, relation to the user) and override `findUserCallback` to resolve users through it.
+
+#### Example: find-or-create (app-owned)
+
+```ts
+collections: [
+  {
+    collection: 'users',
+    findUserCallback: async ({ payload, profileEmail, profileId }) => {
+      if (!profileEmail) return null
+
+      const existing = await payload.find({
+        collection: 'users',
+        limit: 1,
+        overrideAccess: true,
+        where: { email: { equals: profileEmail } },
+      })
+
+      if (existing.docs[0]) return existing.docs[0]
+
+      return payload.create({
+        collection: 'users',
+        data: {
+          email: profileEmail,
+          // Optional: store IdP subject on a custom field for linking.
+          // googleSub / microsoftId: profileId,
+          // Auth collections still require a password; use an unguessable value (user signs in via social, not password).
+          password: crypto.randomUUID(),
+        },
+        overrideAccess: true,
+      })
+    },
+  },
+]
+```
 
 ## Provider profiles
 
-After a successful OAuth callback, the plugin loads the user profile from the IdP
-(**not** by decoding the access token). The object is what you receive as
-`profile` in `findUserCallback` (and in the temporary JSON stub while login is
-still WIP).
+After a successful OAuth callback, the plugin loads the user profile from the IdP (**not** by decoding the access token). You receive it as `profile` in `findUserCallback`, plus normalized `profileEmail` / `profileId`.
 
-Use the exported TypeScript types `GoogleUserInfoProfile` and
-`MicrosoftGraphMeProfile` for field names and JSDoc. Extra keys may appear
-depending on scopes / tenant; treat unknown fields as optional.
+Use the exported TypeScript types `GoogleUserInfoProfile` and `MicrosoftGraphMeProfile` for field names and JSDoc. Extra keys may appear depending on scopes / tenant; treat unknown fields as optional.
 
 ### Google (OpenID Connect UserInfo)
 

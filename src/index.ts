@@ -2,7 +2,11 @@ import type { Config, Endpoint } from 'payload'
 
 import { deepMergeSimple } from 'payload/shared'
 
-import type { PayloadSimpleSocialLoginConfig, SocialProviderId } from './types.js'
+import type {
+  CollectionSocialLoginConfig,
+  PayloadSimpleSocialLoginConfig,
+  SocialProviderId,
+} from './types.js'
 
 import { createCallbackEndpoint } from './endpoints/createCallbackEndpoint.js'
 import { createLoginEndpoint } from './endpoints/createLoginEndpoint.js'
@@ -19,9 +23,29 @@ export type {
   MicrosoftGraphMeProfile,
   MicrosoftProviderConfig,
   PayloadSimpleSocialLoginConfig,
+  SocialLoginUser,
   SocialProviderId,
   SocialProviderProfile,
 } from './types.js'
+
+const resolveCollections = ({
+  config,
+  pluginOptions,
+}: {
+  config: Config
+  pluginOptions: PayloadSimpleSocialLoginConfig
+}): CollectionSocialLoginConfig[] => {
+  if (pluginOptions.collections?.length) {
+    return pluginOptions.collections
+  }
+
+  const adminUser = config.admin?.user
+  if (!adminUser) {
+    return []
+  }
+
+  return [{ collection: adminUser }]
+}
 
 export const payloadSimpleSocialLogin =
   (pluginOptions: PayloadSimpleSocialLoginConfig) =>
@@ -44,6 +68,7 @@ export const payloadSimpleSocialLogin =
     }
 
     const enabledProviders = createEnabledProviders(pluginOptions.providers)
+    const collections = resolveCollections({ config, pluginOptions })
     const providerEndpoints: Endpoint[] = []
     const buttonProviders: Array<{
       href: string
@@ -67,6 +92,7 @@ export const payloadSimpleSocialLogin =
         }),
         createCallbackEndpoint({
           callbackURL,
+          collections,
           path: callbackURL,
           provider,
         }),

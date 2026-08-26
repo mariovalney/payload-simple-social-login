@@ -148,7 +148,7 @@ describe('Plugin integration tests', () => {
     const missingPayloadRequest = await createPayloadRequest({ config, request: missingRequest })
     const missingResponse = await endpoint!.handler(missingPayloadRequest)
     expect(missingResponse.status).toBe(302)
-    expect(missingResponse.headers.get('location')).toBe('/admin/login?ssl-error=1')
+    expect(missingResponse.headers.get('location')).toBe('/admin/login?ssl-error=login')
 
     const mismatchRequest = new Request(
       'http://localhost:3000/api/auth/google/callback?state=query-state',
@@ -165,7 +165,7 @@ describe('Plugin integration tests', () => {
     })
     const mismatchResponse = await endpoint!.handler(mismatchPayloadRequest)
     expect(mismatchResponse.status).toBe(302)
-    expect(mismatchResponse.headers.get('location')).toBe('/admin/login?ssl-error=1')
+    expect(mismatchResponse.headers.get('location')).toBe('/admin/login?ssl-error=login')
   })
 
   test('callback redirects to admin login when authorization code is missing', async () => {
@@ -188,7 +188,7 @@ describe('Plugin integration tests', () => {
     expect(endpoint).toBeDefined()
     const response = await endpoint!.handler(payloadRequest)
     expect(response.status).toBe(302)
-    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
+    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
 
     const setCookie = response.headers.get('set-cookie')
     expect(setCookie).toContain('payload-ssl-state-google=')
@@ -215,12 +215,12 @@ describe('Plugin integration tests', () => {
     expect(endpoint).toBeDefined()
     const response = await endpoint!.handler(payloadRequest)
     expect(response.status).toBe(302)
-    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
+    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
   })
 
-  test('callback exchanges code and returns profile when IdP calls succeed', async () => {
+  test('callback logs in matching user and redirects to admin', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'dev@example.com', sub: 'google-user-1' }
+    const profile = { email: 'dev@payloadcms.com', sub: 'google-user-1' }
 
     const originalFetch = globalThis.fetch
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -258,19 +258,61 @@ describe('Plugin integration tests', () => {
 
       expect(endpoint).toBeDefined()
       const response = await endpoint!.handler(payloadRequest)
-      expect(response.status).toBe(200)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin')
 
-      const data = await response.json()
-      expect(data).toMatchObject({
-        type: 'callback',
-        ok: true,
-        profile,
-        provider: 'google',
-      })
+      const cookies =
+        typeof response.headers.getSetCookie === 'function'
+          ? response.headers.getSetCookie()
+          : [response.headers.get('set-cookie')].filter(Boolean)
 
-      const setCookie = response.headers.get('set-cookie')
-      expect(setCookie).toContain('payload-ssl-state-google=')
-      expect(setCookie).toMatch(/Max-Age=0|Expires=/i)
+      expect(cookies.some((cookie) => cookie?.includes('payload-ssl-state-google='))).toBe(true)
+      expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
+      expect(cookies.some((cookie) => cookie?.includes('payload-token=') || cookie?.includes('-token='))).toBe(
+        true,
+      )
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('callback redirects with not-found when no Payload user matches profile email', async () => {
+    const state = 'valid-oauth-state-value'
+    const profile = { email: 'unknown@example.com', sub: 'google-user-unknown' }
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json(profile))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
+        {
+          headers: {
+            Cookie: `payload-ssl-state-google=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const payloadRequest = await createPayloadRequest({ config, request })
+      const endpoint = payload.config.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+
+      expect(endpoint).toBeDefined()
+      const response = await endpoint!.handler(payloadRequest)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=not-found')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -301,7 +343,7 @@ describe('Plugin integration tests', () => {
       expect(endpoint).toBeDefined()
       const response = await endpoint!.handler(payloadRequest)
       expect(response.status).toBe(302)
-      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
     } finally {
       globalThis.fetch = originalFetch
     }

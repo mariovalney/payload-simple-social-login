@@ -24,6 +24,7 @@ export const translations = {
         google: 'Google',
         microsoft: 'Microsoft',
       },
+      userNotFound: 'No account found for this email. Ask an admin for access.',
     },
   },
   pt: {
@@ -34,6 +35,7 @@ export const translations = {
         google: 'Google',
         microsoft: 'Microsoft',
       },
+      userNotFound: 'Nenhuma conta encontrada para este e-mail. Peça acesso a um administrador.',
     },
   },
 } as const
@@ -46,3 +48,4 @@ export type PluginTranslationKeys =
   | 'plugin-simple-social-login:orLoginWith'
   | 'plugin-simple-social-login:providers:google'
   | 'plugin-simple-social-login:providers:microsoft'
+  | 'plugin-simple-social-login:userNotFound'

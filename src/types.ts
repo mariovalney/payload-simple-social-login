@@ -165,6 +165,13 @@ export type MicrosoftGraphMeProfile = {
 /** Profile shape returned by {@link SocialProviderId} after OAuth userinfo / Graph. */
 export type SocialProviderProfile = GoogleUserInfoProfile | MicrosoftGraphMeProfile
 
+/** Minimal user document returned from {@link FindUserCallback}. */
+export type SocialLoginUser = {
+  [key: string]: unknown
+  email?: string
+  id: number | string
+}
+
 export type FindUserCallbackArgs = {
   payload: Payload
   /**
@@ -173,21 +180,40 @@ export type FindUserCallbackArgs = {
    * {@link MicrosoftGraphMeProfile}. See those types for fields and docs links.
    */
   profile: Record<string, unknown>
+  /**
+   * Normalized email from the IdP profile, or `null` if missing.
+   * Google: `email`. Microsoft: `mail ?? userPrincipalName`.
+   */
+  profileEmail: null | string
+  /**
+   * Stable IdP subject / object id, or `null` if missing.
+   * Google: `sub`. Microsoft: `id`.
+   */
+  profileId: null | string
   provider: SocialProviderId
 }
 
-/** Resolve an existing user from the provider profile, or `null` if none. */
-export type FindUserCallback = (args: FindUserCallbackArgs) => Promise<unknown>
+/**
+ * Resolve an existing user from the provider profile, or `null` if none.
+ *
+ * May create and return a user (find-or-create) — the plugin never auto-creates
+ * by itself. Returning `null` denies login (`ssl-error=not-found`).
+ */
+export type FindUserCallback = (args: FindUserCallbackArgs) => Promise<null | SocialLoginUser>
 
 export type CollectionSocialLoginConfig = {
   collection: CollectionSlug
-  findUserCallback: FindUserCallback
+  /**
+   * Locate (or optionally create) a Payload user for this collection.
+   * When omitted, the plugin matches by `profileEmail` only.
+   */
+  findUserCallback?: FindUserCallback
 }
 
 export type PayloadSimpleSocialLoginConfig = {
   /**
    * Authenticated collections this plugin should serve.
-   * If omitted, a default (likely `admin.user`) will be used later.
+   * When omitted, defaults to `[{ collection: admin.user }]` with email match.
    */
   collections?: CollectionSocialLoginConfig[]
   /**

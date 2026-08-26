@@ -7,16 +7,22 @@ import type { PluginTranslationKeys, PluginTranslationsObject } from '../transla
 
 const SSL_ERROR_QUERY = 'ssl-error'
 
+const ERROR_I18N_KEYS = {
+  'login': 'plugin-simple-social-login:loginFailed',
+  'not-found': 'plugin-simple-social-login:userNotFound',
+} as const satisfies Record<string, PluginTranslationKeys>
+
 export const SocialLoginErrorToast = () => {
   const { t } = useTranslation<PluginTranslationsObject, PluginTranslationKeys>()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.get(SSL_ERROR_QUERY) !== '1') {
+    const code = params.get(SSL_ERROR_QUERY)
+    if (!code || !(code in ERROR_I18N_KEYS)) {
       return
     }
 
-    toast.error(t('plugin-simple-social-login:loginFailed'))
+    toast.error(t(ERROR_I18N_KEYS[code as keyof typeof ERROR_I18N_KEYS]))
 
     params.delete(SSL_ERROR_QUERY)
     const query = params.toString()
