@@ -61,8 +61,8 @@ Full test suite (`pnpm test`) also runs Playwright e2e; for routine plugin work 
 Open [http://localhost:3000/admin](http://localhost:3000/admin) after `pnpm dev`.
 
 - Database: SQLite (`dev/payload.db`), created automatically
-- Seed user (if missing): email `dev@payloadcms.com`, password `test`
-- Plugin config in `dev/payload.config.ts` uses an explicit `collections` + `findUserCallback` that matches by `profileEmail` (same behavior as the plugin default, but demonstrates the API for Google and Microsoft)
+- Seed users (if missing): `dev@payloadcms.com` / `test` (`_verified: true`), and `unverified@payloadcms.com` / `test` (`_verified: false`) for testing `ssl-error=unverified`
+- Plugin config in `dev/payload.config.ts` uses the default find-user path (`auth.verify: true` on `users`) with Google and Microsoft providers
 
 After changing client exports (`src/exports/client.ts` or components), run `pnpm generate:importmap`.
 
@@ -80,6 +80,6 @@ Use the **commit** skill at [`.agents/skills/commit/SKILL.md`](.agents/skills/co
 
 ## Tests worth knowing
 
-Integration tests live in `dev/int.spec.ts` and cover provider registration, OAuth state, token/profile mocks, find-user / session redirect, custom paths, and `findUserCallback` allow/deny. Run with `pnpm test:int`.
+Integration tests live in `dev/int.spec.ts` and cover provider registration, OAuth state, token/profile mocks, find-user / session redirect, `auth.verify` / `ssl-error=unverified`, custom paths, and `findUserCallback` allow/deny. Run with `pnpm test:int`.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on pushes and PRs to `main`: `pnpm lint`, `pnpm test:int`, and `pnpm build`. Playwright e2e is not in CI yet.

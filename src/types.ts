@@ -198,6 +198,11 @@ export type FindUserCallbackArgs = {
  *
  * May create and return a user (find-or-create) — the plugin never auto-creates
  * by itself. Returning `null` denies login (`ssl-error=not-found`).
+ *
+ * When omitted, the default email match also rejects unverified users on
+ * collections with `auth.verify` (`ssl-error=unverified`). A custom callback
+ * owns that check: if you return an unverified user, the plugin still issues a
+ * JWT and Payload’s admin JWT strategy may refuse the session silently.
  */
 export type FindUserCallback = (args: FindUserCallbackArgs) => Promise<null | SocialLoginUser>
 
@@ -205,7 +210,8 @@ export type CollectionSocialLoginConfig = {
   collection: CollectionSlug
   /**
    * Locate (or optionally create) a Payload user for this collection.
-   * When omitted, the plugin matches by `profileEmail` only.
+   * When omitted, the plugin matches by `profileEmail` and respects `auth.verify`.
+   * When set, you own verification / `_verified` handling.
    */
   findUserCallback?: FindUserCallback
 }

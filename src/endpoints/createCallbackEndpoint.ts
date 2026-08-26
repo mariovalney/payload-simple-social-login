@@ -3,6 +3,7 @@ import type { Endpoint, PayloadRequest } from 'payload'
 import type { BaseProvider } from '../providers/base.js'
 import type { CollectionSocialLoginConfig, SocialLoginUser } from '../types.js'
 
+import { UnverifiedSocialUserError } from '../errors/UnverifiedSocialUserError.js'
 import { defaultFindUserByEmail } from '../utils/defaultFindUserByEmail.js'
 import { loginUserWithoutPassword } from '../utils/loginUserWithoutPassword.js'
 import { normalizeProviderProfile } from '../utils/normalizeProviderProfile.js'
@@ -14,7 +15,7 @@ import {
 } from '../utils/oauthState.js'
 import { resolveAbsoluteCallbackUrl } from '../utils/resolveAbsoluteCallbackUrl.js'
 
-export type SslErrorCode = 'login' | 'not-found'
+export type SslErrorCode = 'login' | 'not-found' | 'unverified'
 
 const SSL_ERROR_QUERY = 'ssl-error'
 
@@ -179,7 +180,10 @@ export const createCallbackEndpoint = ({
         clearCookie,
         req,
       })
-    } catch {
+    } catch (error) {
+      if (error instanceof UnverifiedSocialUserError) {
+        return redirectToLoginWithError(req, clearCookie, 'unverified')
+      }
       return redirectToLoginWithError(req, clearCookie, 'login')
     }
   },

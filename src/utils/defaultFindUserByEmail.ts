@@ -2,6 +2,8 @@ import type { CollectionSlug, Payload } from 'payload'
 
 import type { SocialLoginUser } from '../types.js'
 
+import { UnverifiedSocialUserError } from '../errors/UnverifiedSocialUserError.js'
+
 export const defaultFindUserByEmail = async ({
   collection,
   payload,
@@ -25,6 +27,12 @@ export const defaultFindUserByEmail = async ({
   const doc = result.docs[0]
   if (!doc || typeof doc !== 'object' || !('id' in doc)) {
     return null
+  }
+
+  const collectionConfig = payload.collections[collection]?.config
+  const requiresVerify = Boolean(collectionConfig?.auth?.verify)
+  if (requiresVerify && '_verified' in doc && doc._verified === false) {
+    throw new UnverifiedSocialUserError()
   }
 
   return doc as SocialLoginUser

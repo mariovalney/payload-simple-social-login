@@ -27,7 +27,7 @@ Paste this into any coding agent to wire the plugin with the defaults (email mat
 Install and configure payload-simple-social-login in this Payload CMS project the simplest way:
 
 1. Add the dependency (pnpm/npm/yarn as used here).
-2. Register payloadSimpleSocialLogin in payload.config with only the providers we need (google and/or microsoft), reading clientId/clientSecret from env vars. Leave callbackURL, loginUrl, collections, and findUserCallback unset so defaults apply (match existing users by profile email on admin.user).
+2. Register payloadSimpleSocialLogin in payload.config with only the providers we need (google and/or microsoft), reading clientId/clientSecret from env vars. Leave callbackURL, loginUrl, collections, and findUserCallback unset so defaults apply (match existing users by profile email on admin.user; default also respects `auth.verify`).
 3. Check env vars from .env and add to .env.sample or .env.example (do not create anything new — if secrets are needed, add empty placeholders and ask the user to fill them in).
 4. Document the OAuth redirect URIs as {APP_ORIGIN}{routes.api}/auth/{provider}/callback (e.g. http://localhost:3000/api/auth/google/callback).
 5. Run the project's Payload generate:importmap command so admin login buttons appear.
@@ -76,7 +76,7 @@ export default buildConfig({
 | `providers.*.label` | Button label; falls back to plugin i18n. |
 | `providers.microsoft.tenant` | Entra tenant segment. Default `common`. |
 | `collections` | Auth collections to resolve users for. When omitted: `[{ collection: admin.user }]` with email match. |
-| `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail`. |
+| `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail` and respect `auth.verify`. |
 | `showButtonOnLogin` | Show buttons on the admin login form. Default `true`. |
 | `disabled` | Skip registering endpoints and UI. Default `false`. |
 
@@ -88,6 +88,10 @@ After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each
 | --- | --- | --- |
 | `profileId` | `sub` | `id` |
 | `profileEmail` | `email` | `mail ?? userPrincipalName` |
+
+**Default email match and `auth.verify`.** When you omit `findUserCallback`, the plugin also checks the collection’s `auth.verify`. If verification is required and the matched user has `_verified === false`, login is denied with `ssl-error=unverified` (toast), instead of issuing a session that Payload’s JWT strategy would reject silently.
+
+**Custom `findUserCallback` owns verification.** If you override the callback, the plugin does **not** enforce `_verified`. You can mark the user verified (e.g. after a trusted IdP email), return `null`, or return an unverified user — in that last case the plugin still issues a JWT and the admin panel may bounce to `/admin/login` with no toast (`user: null` from Payload’s JWT strategy).
 
 **This plugin never auto-creates users** and will not add a built-in create path. Payload has no standardized way to create auth users (required fields, password, verify, roles, tenants, hooks differ per app). Provisioning belongs in your `findUserCallback` if you want it.
 
@@ -135,6 +139,7 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 | --- | --- | --- |
 | `login` | Invalid/missing state, missing code, IdP error, token/profile failure, missing `profileEmail` | Generic “try again” |
 | `not-found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
+| `unverified` | Default findUser: collection has `auth.verify` and matched user has `_verified: false` | Please verify your email before logging in |
 
 ### Out of scope
 

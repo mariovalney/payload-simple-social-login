@@ -18,6 +18,7 @@
 export const translations = {
   en: {
     'plugin-simple-social-login': {
+      emailNotVerified: 'Please verify your email before logging in.',
       loginFailed: 'Something went wrong. Please try again.',
       orLoginWith: 'or login with',
       providers: {
@@ -29,6 +30,7 @@ export const translations = {
   },
   pt: {
     'plugin-simple-social-login': {
+      emailNotVerified: 'Verifique seu e-mail antes de entrar.',
       loginFailed: 'Algo deu errado. Tente novamente.',
       orLoginWith: 'ou entre com',
       providers: {
@@ -44,6 +46,7 @@ export type PluginTranslationsObject = (typeof translations)['en']
 
 /** Payload i18n keys use `namespace:path:to:leaf` (colons, not dots). */
 export type PluginTranslationKeys =
+  | 'plugin-simple-social-login:emailNotVerified'
   | 'plugin-simple-social-login:loginFailed'
   | 'plugin-simple-social-login:orLoginWith'
   | 'plugin-simple-social-login:providers:google'
