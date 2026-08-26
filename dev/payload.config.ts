@@ -58,6 +58,12 @@ export default buildConfig({
   },
   plugins: [
     payloadSimpleSocialLogin({
+      collections: [
+        {
+          autoVerify: true,
+          collection: 'users',
+        },
+      ],
       providers: {
         google: {
           clientId: process.env.SOCIAL_LOGIN_GOOGLE_CLIENT_ID || '',

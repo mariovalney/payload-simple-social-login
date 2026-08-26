@@ -76,7 +76,8 @@ export default buildConfig({
 | `providers.*.label` | Button label; falls back to plugin i18n. |
 | `providers.microsoft.tenant` | Entra tenant segment. Default `common`. |
 | `collections` | Auth collections to resolve users for. When omitted: `[{ collection: admin.user }]` with email match. |
-| `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail` and respect `auth.verify`. |
+| `collections[].autoVerify` | Optional. Default find only: if the collection has `auth.verify` and the user is unverified, set `_verified: true` (only that field) and continue. Default `false`. Ignored when `findUserCallback` is set. |
+| `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail` and respect `auth.verify` / `autoVerify`. |
 | `showButtonOnLogin` | Show buttons on the admin login form. Default `true`. |
 | `disabled` | Skip registering endpoints and UI. Default `false`. |
 
@@ -89,7 +90,7 @@ After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each
 | `profileId` | `sub` | `id` |
 | `profileEmail` | `email` | `mail ?? userPrincipalName` |
 
-**Default email match and `auth.verify`.** When you omit `findUserCallback`, the plugin also checks the collection’s `auth.verify`. If verification is required and the matched user has `_verified === false`, login is denied with `ssl-error=unverified` (toast), instead of issuing a session that Payload’s JWT strategy would reject silently.
+**Default email match and `auth.verify`.** When you omit `findUserCallback`, the plugin also checks the collection’s `auth.verify`. If verification is required and the matched user has `_verified === false`, login is denied with `ssl-error=unverified` (toast), instead of issuing a session that Payload’s JWT strategy would reject silently. Set `collections[].autoVerify: true` to update **only** `_verified` to `true` on that match and continue login. If the collection has no `auth.verify`, neither the reject nor the auto-update runs.
 
 **Custom `findUserCallback` owns verification.** If you override the callback, the plugin does **not** enforce `_verified`. You can mark the user verified (e.g. after a trusted IdP email), return `null`, or return an unverified user — in that last case the plugin still issues a JWT and the admin panel may bounce to `/admin/login` with no toast (`user: null` from Payload’s JWT strategy).
 

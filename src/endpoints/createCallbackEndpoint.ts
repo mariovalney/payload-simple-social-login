@@ -64,6 +64,7 @@ const resolveUserFromCollections = async ({
   profileEmail,
   profileId,
   providerId,
+  req,
 }: {
   collections: CollectionSocialLoginConfig[]
   payload: PayloadRequest['payload']
@@ -71,6 +72,7 @@ const resolveUserFromCollections = async ({
   profileEmail: string
   profileId: null | string
   providerId: BaseProvider['id']
+  req: PayloadRequest
 }): Promise<{ collection: CollectionSocialLoginConfig['collection']; user: SocialLoginUser } | null> => {
   for (const entry of collections) {
     const findUser =
@@ -80,9 +82,11 @@ const resolveUserFromCollections = async ({
           return null
         }
         return defaultFindUserByEmail({
+          autoVerify: entry.autoVerify === true,
           collection: entry.collection,
           payload,
           profileEmail: email,
+          req,
         })
       })
 
@@ -158,6 +162,7 @@ export const createCallbackEndpoint = ({
         profileEmail,
         profileId,
         providerId: provider.id,
+        req,
       })
 
       if (!matched) {

@@ -1,17 +1,21 @@
-import type { CollectionSlug, Payload } from 'payload'
+import type { CollectionSlug, Payload, PayloadRequest } from 'payload'
 
 import type { SocialLoginUser } from '../types.js'
 
 import { UnverifiedSocialUserError } from '../errors/UnverifiedSocialUserError.js'
 
 export const defaultFindUserByEmail = async ({
+  autoVerify = false,
   collection,
   payload,
   profileEmail,
+  req,
 }: {
+  autoVerify?: boolean
   collection: CollectionSlug
   payload: Payload
   profileEmail: string
+  req?: PayloadRequest
 }): Promise<null | SocialLoginUser> => {
   const result = await payload.find({
     collection,
@@ -22,6 +26,7 @@ export const defaultFindUserByEmail = async ({
         equals: profileEmail,
       },
     },
+    ...(req ? { req } : {}),
   })
 
   const doc = result.docs[0]
@@ -31,9 +36,26 @@ export const defaultFindUserByEmail = async ({
 
   const collectionConfig = payload.collections[collection]?.config
   const requiresVerify = Boolean(collectionConfig?.auth?.verify)
-  if (requiresVerify && '_verified' in doc && doc._verified === false) {
+  if (!requiresVerify || !('_verified' in doc) || doc._verified !== false) {
+    return doc as SocialLoginUser
+  }
+
+  if (!autoVerify) {
     throw new UnverifiedSocialUserError()
   }
 
-  return doc as SocialLoginUser
+  const updated = await payload.update({
+    id: doc.id,
+    collection,
+    data: {
+      _verified: true,
+    },
+    overrideAccess: true,
+    ...(req ? { req } : {}),
+  })
+
+  return {
+    ...(updated as SocialLoginUser),
+    _verified: true,
+  }
 }

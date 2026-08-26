@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Default find-user path respects collection `auth.verify`: unverified users get `ssl-error=unverified` and a dedicated toast (en/pt)
+- `collections[].autoVerify`: on the default find only, mark `_verified: true` (sole field update) when `auth.verify` is on and the user is unverified
 - Docs: custom `findUserCallback` owns `_verified` handling; without a check, Payload’s JWT strategy may refuse the session silently
 
 ## [1.0.1] - 2026-08-26
