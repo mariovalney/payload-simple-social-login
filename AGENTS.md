@@ -10,3 +10,7 @@ When in doubt about Payload APIs, plugins, auth, endpoints, or config patterns, 
 ## Commits
 
 For a standardized commit, use the **commit** skill at `.agents/skills/commit/SKILL.md` (invoke with `/commit`).
+
+## Releases
+
+For SemVer release **prep** (checks, infer version, confirm, CHANGELOG + `package.json`), use the **release** skill at `.agents/skills/release/SKILL.md` (invoke with `/release`). Publishing stays manual: GitHub Release tag `vX.Y.Z` triggers Actions.
