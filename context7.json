@@ -1,0 +1,16 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "payload-simple-social-login",
+  "description": "Payload CMS plugin for Google and Microsoft (Entra ID) OAuth on admin login, with findUserCallback and passwordless session.",
+  "excludeFolders": ["dev", "dist", ".agents", ".github", "node_modules"],
+  "excludeFiles": ["CHANGELOG.md", "LICENSE"],
+  "rules": [
+    "Install with the app package manager, then run Payload generate:importmap so afterLogin buttons appear.",
+    "Register payloadSimpleSocialLogin in payload.config plugins; prefer env vars for clientId/clientSecret.",
+    "Leave callbackURL, loginUrl, collections, and findUserCallback unset for the simplest setup (email match on admin.user).",
+    "OAuth redirect URI is {APP_ORIGIN}{routes.api}/auth/{provider}/callback (e.g. http://localhost:3000/api/auth/google/callback).",
+    "Do not auto-create users or link/unlink OAuth accounts unless the app implements that in findUserCallback.",
+    "Import public TypeScript types from payload-simple-social-login/types; client UI from payload-simple-social-login/client.",
+    "Peer dependencies: payload, @payloadcms/ui, react, and react-dom — do not pin a separate @payloadcms/ui from the plugin."
+  ]
+}
