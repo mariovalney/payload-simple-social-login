@@ -2,10 +2,28 @@ import type { CollectionSlug, Payload } from 'payload'
 
 /**
  * Shared OAuth options for every provider.
- * Fields (clientId, clientSecret, scopes, etc.) will be added later.
  */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- shared fields TBD
-export type ProviderConfig = {}
+export type ProviderConfig = {
+  /**
+   * OAuth callback path (Payload root endpoint).
+   * @default `/auth/{providerId}/callback`
+   */
+  callbackURL?: string
+  /** OAuth application client ID. */
+  clientId: string
+  /** OAuth application client secret. */
+  clientSecret: string
+  /**
+   * Label for the social login button.
+   * Falls back to the plugin i18n string for this provider when omitted.
+   */
+  label?: string
+  /**
+   * Login start path. Same value for the button `href` base and the Payload endpoint path.
+   * @default `/auth/{providerId}/login`
+   */
+  loginUrl?: string
+}
 
 /** Google-specific options beyond {@link ProviderConfig}. */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Google fields TBD
@@ -14,8 +32,17 @@ export type GoogleProviderSpecific = {}
 export type GoogleProviderConfig = GoogleProviderSpecific & ProviderConfig
 
 /** Microsoft/Entra-specific options beyond {@link ProviderConfig}. */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Microsoft fields TBD
-export type MicrosoftProviderSpecific = {}
+export type MicrosoftProviderSpecific = {
+  /**
+   * Entra ID tenant for authorize/token URLs.
+   * - `common` (default) — personal Microsoft accounts (Hotmail, Outlook, etc.) and any work/school tenant
+   * - `organizations` — work/school accounts only
+   * - `consumers` — personal Microsoft accounts only
+   * - A tenant ID or domain — restrict to that directory
+   * @default `common`
+   */
+  tenant?: string
+}
 
 export type MicrosoftProviderConfig = MicrosoftProviderSpecific & ProviderConfig
 
@@ -54,4 +81,9 @@ export type PayloadSimpleSocialLoginConfig = {
     google?: GoogleProviderConfig
     microsoft?: MicrosoftProviderConfig
   }
+  /**
+   * Show social login buttons on the admin login form (`afterLogin`).
+   * @default true
+   */
+  showButtonOnLogin?: boolean
 }

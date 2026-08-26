@@ -1,4 +1,5 @@
 /**
- * OAuth endpoint handlers for social providers will live here.
+ * OAuth endpoint factories for social providers.
  */
-export {}
+export { createCallbackEndpoint } from './createCallbackEndpoint.js'
+export { createLoginEndpoint } from './createLoginEndpoint.js'

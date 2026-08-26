@@ -56,7 +56,18 @@ export default buildConfig({
   },
   plugins: [
     payloadSimpleSocialLogin({
-      providers: {},
+      providers: {
+        google: {
+          clientId: process.env.SOCIAL_LOGIN_GOOGLE_CLIENT_ID || 'dev-google-client-id',
+          clientSecret:
+            process.env.SOCIAL_LOGIN_GOOGLE_CLIENT_SECRET || 'dev-google-client-secret',
+        },
+        microsoft: {
+          clientId: process.env.SOCIAL_LOGIN_MICROSOFT_CLIENT_ID || 'dev-microsoft-client-id',
+          clientSecret:
+            process.env.SOCIAL_LOGIN_MICROSOFT_CLIENT_SECRET || 'dev-microsoft-client-secret',
+        },
+      },
     }),
   ],
   secret: process.env.PAYLOAD_SECRET || 'test-secret_key',

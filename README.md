@@ -6,7 +6,16 @@ It adds an “or login with” UI to the login form and OAuth endpoints per prov
 
 ## Installation
 
-TODO
+Install the package, add the plugin to your Payload config, then regenerate the admin import map so the login buttons resolve:
+
+```bash
+pnpm add payload-simple-social-login
+pnpm payload generate:importmap
+```
+
+(or `npx payload generate:importmap` / your package manager’s equivalent)
+
+Without this step, the `afterLogin` social buttons may not appear in the admin panel.
 
 ## Configuration
 
