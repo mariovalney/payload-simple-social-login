@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-08-26
+
+### Fixed
+
+- Point package `exports` / `main` / `types` at `dist/` so npm consumers resolve built JS (npm does not rewrite those fields from `publishConfig`)
+- Move `@payloadcms/ui` to a peer dependency (`^3.0.0`) so installs do not pull a mismatched UI version; widen `payload` peer to `^3.0.0`
+
 ## [1.0.0] - 2026-08-26
 
 First stable release.
@@ -25,4 +32,5 @@ First stable release.
 - The plugin does not auto-create users or link/unlink OAuth accounts; apps own that via `findUserCallback` when needed
 - Provider access tokens are not stored; only the Payload session cookie is issued
 
+[1.0.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.1
 [1.0.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.0

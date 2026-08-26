@@ -19,6 +19,20 @@ pnpm payload generate:importmap
 
 Without this step, the `afterLogin` social buttons may not appear in the admin panel.
 
+### AI install prompt
+
+Paste this into any coding agent to wire the plugin with the defaults (email match on `admin.user`, no auto-create):
+
+```text
+Install and configure payload-simple-social-login in this Payload CMS project the simplest way:
+
+1. Add the dependency (pnpm/npm/yarn as used here).
+2. Register payloadSimpleSocialLogin in payload.config with only the providers we need (google and/or microsoft), reading clientId/clientSecret from env vars. Leave callbackURL, loginUrl, collections, and findUserCallback unset so defaults apply (match existing users by profile email on admin.user).
+3. Check env vars from .env and add to .env.sample or .env.example (do not create anything new — if secrets are needed, add empty placeholders and ask the user to fill them in).
+4. Document the OAuth redirect URIs as {APP_ORIGIN}{routes.api}/auth/{provider}/callback (e.g. http://localhost:3000/api/auth/google/callback).
+5. Run the project's Payload generate:importmap command so admin login buttons appear.
+```
+
 ## Configuration
 
 ```ts
