@@ -1,7 +1,7 @@
 name: Publish
 
 # Trusted Publishing (OIDC): https://docs.npmjs.com/trusted-publishers
-# Provenance is automatic with OIDC — no NPM_TOKEN.
+# Provenance is automatic with OIDC. No NPM_TOKEN.
 # (The provenance docs example that uses secrets.NPM_TOKEN is the older token-based path.)
 
 on:
@@ -61,7 +61,7 @@ jobs:
       - name: Integration tests
         run: pnpm test:int
 
-      # OIDC auth — do not set NODE_AUTH_TOKEN (empty token breaks trusted publish).
+      # OIDC auth. Do not set NODE_AUTH_TOKEN (empty token breaks trusted publish).
       # Provenance is generated automatically with Trusted Publishing.
       - name: Publish
         run: npm publish --access public

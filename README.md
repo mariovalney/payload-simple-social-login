@@ -28,7 +28,7 @@ Install and configure payload-simple-social-login in this Payload CMS project th
 
 1. Add the dependency (pnpm/npm/yarn as used here).
 2. Register payloadSimpleSocialLogin in payload.config with only the providers we need (google and/or microsoft), reading clientId/clientSecret from env vars. Leave callbackURL, loginUrl, collections, and findUserCallback unset so defaults apply (match existing users by profile email on admin.user; default also respects `auth.verify`).
-3. Check env vars from .env and add to .env.sample or .env.example (do not create anything new — if secrets are needed, add empty placeholders and ask the user to fill them in).
+3. Check env vars from .env and add to .env.sample or .env.example (do not create anything new; if secrets are needed, add empty placeholders and ask the user to fill them in).
 4. Document the OAuth redirect URIs as {APP_ORIGIN}{routes.api}/auth/{provider}/callback (e.g. http://localhost:3000/api/auth/google/callback).
 5. Run the project's Payload generate:importmap command so admin login buttons appear.
 ```
@@ -92,7 +92,7 @@ After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each
 
 **Default email match and `auth.verify`.** When you omit `findUserCallback`, the plugin also checks the collection’s `auth.verify`. If verification is required and the matched user has `_verified === false`, login is denied with `ssl-error=unverified` (toast), instead of issuing a session that Payload’s JWT strategy would reject silently. Set `collections[].autoVerify: true` to update **only** `_verified` to `true` on that match and continue login. If the collection has no `auth.verify`, neither the reject nor the auto-update runs.
 
-**Custom `findUserCallback` owns verification.** If you override the callback, the plugin does **not** enforce `_verified`. You can mark the user verified (e.g. after a trusted IdP email), return `null`, or return an unverified user — in that last case the plugin still issues a JWT and the admin panel may bounce to `/admin/login` with no toast (`user: null` from Payload’s JWT strategy).
+**Custom `findUserCallback` owns verification.** If you override the callback, the plugin does **not** enforce `_verified`. You can mark the user verified (e.g. after a trusted IdP email), return `null`, or return an unverified user. In that last case the plugin still issues a JWT and the admin panel may bounce to `/admin/login` with no toast (`user: null` from Payload’s JWT strategy).
 
 **This plugin never auto-creates users** and will not add a built-in create path. Payload has no standardized way to create auth users (required fields, password, verify, roles, tenants, hooks differ per app). Provisioning belongs in your `findUserCallback` if you want it.
 
@@ -102,7 +102,7 @@ After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each
 
 Use when the collection has `auth: { verify: true }` and a successful OAuth login is enough to mark the existing Payload user verified. Does not create users; only sets `_verified: true` on match. 
 
-**Has no effect if you set `findUserCallback`** — then you own `_verified` yourself.
+**Has no effect if you set `findUserCallback`.** Then you own `_verified` yourself.
 
 ```ts
 collections: [
@@ -205,7 +205,7 @@ Endpoint: `GET https://graph.microsoft.com/v1.0/me`
 
 Docs: [Get user](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0) · [user resource](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0)
 
-Typical **default** payload (fictional) — Graph returns only this common subset unless you `$select` more fields (this plugin does not `$select` today):
+Typical **default** payload (fictional). Graph returns only this common subset unless you `$select` more fields (this plugin does not `$select` today):
 
 ```json
 {
@@ -227,7 +227,7 @@ Typical **default** payload (fictional) — Graph returns only this common subse
 | Field | Notes |
 | --- | --- |
 | `id` | Stable Entra / MSA object id (GUID; preferred for long-term linking) |
-| `mail` | SMTP address; may be `null` — fall back to `userPrincipalName` |
+| `mail` | SMTP address; may be `null`. Fall back to `userPrincipalName` |
 | `userPrincipalName` | Sign-in name (often email-shaped) |
 | `displayName`, `givenName`, `surname` | Display / name fields |
 | `businessPhones`, `jobTitle`, `mobilePhone`, `officeLocation`, `preferredLanguage` | Often empty/`null` depending on the account |
@@ -240,6 +240,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## References
 
 - [Building Your Own Plugin](https://payloadcms.com/docs/plugins/build-your-own)
-- [Google OpenID Connect — UserInfo](https://developers.google.com/identity/openid-connect/reference#userinfofields)
-- [Microsoft Graph — Get user](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0)
-- [Microsoft Graph — user resource](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0)
+- [Google OpenID Connect: UserInfo](https://developers.google.com/identity/openid-connect/reference#userinfofields)
+- [Microsoft Graph: Get user](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0)
+- [Microsoft Graph: user resource](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0)

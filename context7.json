@@ -12,6 +12,6 @@
     "OAuth redirect URI is {APP_ORIGIN}{routes.api}/auth/{provider}/callback (e.g. http://localhost:3000/api/auth/google/callback).",
     "Do not auto-create users or link/unlink OAuth accounts unless the app implements that in findUserCallback.",
     "Import public TypeScript types from payload-simple-social-login/types; client UI from payload-simple-social-login/client.",
-    "Peer dependencies: payload, @payloadcms/ui, react, and react-dom — do not pin a separate @payloadcms/ui from the plugin."
+    "Peer dependencies: payload, @payloadcms/ui, react, and react-dom. Do not pin a separate @payloadcms/ui from the plugin."
   ]
 }

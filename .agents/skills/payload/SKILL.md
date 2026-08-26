@@ -374,10 +374,10 @@ import type { Post, User } from '@/payload-types'
 
 1. **Local API bypasses access control** unless you pass `overrideAccess: false`
 2. **Missing `req` in nested operations** breaks transaction atomicity
-3. **Hook loops** — operations in hooks can re-trigger the same hooks; use `req.context` flags
+3. **Hook loops**: operations in hooks can re-trigger the same hooks; use `req.context` flags
 4. **Field-level access** returns boolean only, no query constraints
 5. **Relationship depth** defaults to 2; set `depth: 0` for IDs only
-6. **Draft status** — `_status` field is auto-injected when drafts are enabled
+6. **Draft status**: `_status` field is auto-injected when drafts are enabled
 7. **Types are stale** until you run `generate:types`
 8. **MongoDB transactions** require replica set configuration
 9. **SQLite transactions** are disabled by default; enable with `transactionOptions: {}`

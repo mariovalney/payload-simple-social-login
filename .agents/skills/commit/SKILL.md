@@ -28,7 +28,7 @@ Keep this step light. Use `pnpm` scripts from this repo’s `package.json`.
 
 - If staged files touch Payload schema/config (`dev/payload.config.ts`, auth collections, plugin fields that change generated types): run `pnpm generate:types`
 - If staged files include JS/TS under `src/` or `dev/` (excluding generated/`*.spec` noise as needed): run `pnpm lint`
-  - Lint must not scan Next build output. If `pnpm lint` fails only on `**/.next/**`, treat as tooling misconfig (fix ignores) — not a source failure
+  - Lint must not scan Next build output. If `pnpm lint` fails only on `**/.next/**`, treat as tooling misconfig (fix ignores), not a source failure
 - Run `pnpm test:int` only (do **not** run e2e / Playwright as part of commit)
 - If lint, generate, or integration tests fail: inform the user and ask whether to continue anyway
 - If the user chooses not to continue, stop
@@ -38,7 +38,7 @@ Keep this step light. Use `pnpm` scripts from this repo’s `package.json`.
 
 - For each staged file under `src/`:
   - Search for `console.(log|error|warn|info|debug)`
-  - Read surrounding context (5–7 lines)
+  - Read surrounding context (5-7 lines)
   - **IGNORE** legitimate catch / error handling (`console.error(error)` in catch)
   - **IGNORE** test files under `dev/` (`*.spec.ts`, etc.)
   - **IGNORE** when the same line or the line above has an intentional comment (e.g. `// intentional console`, `// skip console`)
@@ -58,21 +58,21 @@ Keep this step light. Use `pnpm` scripts from this repo’s `package.json`.
 
 ### 5. Determine Commit Tag
 
-- `[Feat]` – new plugin/dev functionality
-- `[Fix]` – bug or type fixes
-- `[Test]` – only test files changed
-- `[Refact]` – refactor, no behavior change
-- `[Build]` – package.json, scripts, tooling config
-- `[Docs]` – documentation only
-- `[Style]` – formatting only
-- `[IA]` – only `.cursor/` / `.agents/` changes
+- `[Feat]`: new plugin/dev functionality
+- `[Fix]`: bug or type fixes
+- `[Test]`: only test files changed
+- `[Refact]`: refactor, no behavior change
+- `[Build]`: package.json, scripts, tooling config
+- `[Docs]`: documentation only
+- `[Style]`: formatting only
+- `[IA]`: only `.cursor/` / `.agents/` changes
 
 **Priority:** Test → Fix → Feat → Refact → Docs → IA → Build
 
 ### 6. Create Commit Title
 
 - English, concise, focus on *what* (not *how*)
-- Max ~50–60 characters
+- Max ~50-60 characters
 - Format: `[Tag] Short description`
 - Examples: `[Feat] Add users auth to dev app`, `[Docs] Rewrite plugin README`
 
@@ -82,7 +82,7 @@ If multiple files or non-trivial changes, add a body:
 
 - What changed and why (value-focused)
 - Group by area with short bullets when several areas are touched
-- List main files (at most 5–7)
+- List main files (at most 5-7)
 - Mention breaking changes or new deps if any
 - **Never** include `Co-authored-by`
 
@@ -112,7 +112,7 @@ Run **only** if the step 2 failure flag is set:
 
 If the flag is not set, skip to step 11.
 
-### 11. Present and Confirm (always — never skip)
+### 11. Present and Confirm (always; never skip)
 
 **CRITICAL:** Always stop here and wait for the user. Do **not** run `git commit` in the same turn you create `COMMIT_MSG.md`, even if the user already said “commit”, “pode comitar”, “ship it”, or similar.
 

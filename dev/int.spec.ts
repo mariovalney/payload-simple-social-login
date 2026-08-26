@@ -644,6 +644,19 @@ describe('Plugin integration tests', () => {
     const state = 'valid-oauth-state-value'
     const profile = { email: 'unverified@payloadcms.com', sub: 'google-user-unverified' }
 
+    const noAutoVerifyConfig = payloadSimpleSocialLogin({
+      collections: [
+        {
+          collection: 'users',
+        },
+      ],
+      providers: { google: dummyGoogle },
+    })({
+      admin: { user: 'users' },
+      collections: [],
+      secret: 'test',
+    } as unknown as Config)
+
     const originalFetch = globalThis.fetch
     globalThis.fetch = ((input: RequestInfo | URL) => {
       const url =
@@ -669,7 +682,7 @@ describe('Plugin integration tests', () => {
       )
 
       const payloadRequest = await createPayloadRequest({ config, request })
-      const endpoint = payload.config.endpoints?.find(
+      const endpoint = noAutoVerifyConfig.endpoints?.find(
         (item) => item.path === '/auth/google/callback' && item.method === 'get',
       )
 

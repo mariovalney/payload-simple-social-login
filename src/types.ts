@@ -35,10 +35,10 @@ export type GoogleProviderConfig = GoogleProviderSpecific & ProviderConfig
 export type MicrosoftProviderSpecific = {
   /**
    * Entra ID tenant for authorize/token URLs.
-   * - `common` (default) — personal Microsoft accounts (Hotmail, Outlook, etc.) and any work/school tenant
-   * - `organizations` — work/school accounts only
-   * - `consumers` — personal Microsoft accounts only
-   * - A tenant ID or domain — restrict to that directory
+   * - `common` (default): personal Microsoft accounts (Hotmail, Outlook, etc.) and any work/school tenant
+   * - `organizations`: work/school accounts only
+   * - `consumers`: personal Microsoft accounts only
+   * - A tenant ID or domain: restrict to that directory
    * @default `common`
    */
   tenant?: string
@@ -52,7 +52,7 @@ export type SocialProviderId = 'google' | 'microsoft'
  * Google UserInfo response (`GET https://openidconnect.googleapis.com/v1/userinfo`).
  *
  * Official field list:
- * {@link https://developers.google.com/identity/openid-connect/reference#userinfofields | Google OpenID Connect — UserInfo fields}
+ * {@link https://developers.google.com/identity/openid-connect/reference#userinfofields | Google OpenID Connect: UserInfo fields}
  *
  * Example (fictional):
  * ```ts
@@ -143,7 +143,7 @@ export type MicrosoftGraphMeProfile = {
   /** Job title. */
   jobTitle?: null | string
   /**
-   * SMTP email address. May be `null` for some personal or incomplete accounts —
+   * SMTP email address. May be `null` for some personal or incomplete accounts;
    * then use `userPrincipalName`.
    */
   mail?: null | string
@@ -196,7 +196,7 @@ export type FindUserCallbackArgs = {
 /**
  * Resolve an existing user from the provider profile, or `null` if none.
  *
- * May create and return a user (find-or-create) — the plugin never auto-creates
+ * May create and return a user (find-or-create). The plugin never auto-creates
  * by itself. Returning `null` denies login (`ssl-error=not-found`).
  *
  * When omitted, the default email match also rejects unverified users on

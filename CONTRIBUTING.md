@@ -6,9 +6,9 @@ How to develop and test **payload-simple-social-login** locally. For installing 
 
 Releases follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 
-- **MAJOR** — breaking changes for consumers of the plugin API or documented behavior
-- **MINOR** — backward-compatible features
-- **PATCH** — backward-compatible bug fixes
+- **MAJOR**: breaking changes for consumers of the plugin API or documented behavior
+- **MINOR**: backward-compatible features
+- **PATCH**: backward-compatible bug fixes
 
 Document user-facing changes in [CHANGELOG.md](CHANGELOG.md) (Keep a Changelog style) when relevant. Commit messages still use the [commit skill](.agents/skills/commit/SKILL.md) (`/commit`).
 
@@ -41,7 +41,7 @@ Redirect URIs in the IdP consoles must match the plugin callbacks (with Payload 
 | `src/exports/client.ts` | Admin client components entry (`payload-simple-social-login/client`) |
 | `src/exports/types.ts` | Public TypeScript types (`payload-simple-social-login/types`) |
 | `dev/` | Next.js + Payload test app that consumes the plugin |
-| `.agents/skills/` | Agent skills (Payload, commit) — see below |
+| `.agents/skills/` | Agent skills (Payload, commit); see below |
 | `AGENTS.md` | Short pointer to those skills |
 
 ## Scripts
