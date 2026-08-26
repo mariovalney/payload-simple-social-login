@@ -53,3 +53,6 @@ next-env.d.ts
 # docs
 TODO.md
 COMMIT_MSG.md
+
+# local
+.files
