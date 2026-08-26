@@ -1,24 +1,43 @@
 {
   "name": "payload-simple-social-login",
   "version": "1.0.0",
-  "description": "A blank template to get started with Payload 3.0",
+  "description": "Simple social login (Google and Microsoft) for Payload default authentication.",
+  "keywords": [
+    "payload",
+    "payloadcms",
+    "payload-plugin",
+    "oauth",
+    "social-login",
+    "google",
+    "microsoft",
+    "entra-id"
+  ],
+  "homepage": "https://github.com/mariovalney/payload-simple-social-login#readme",
+  "bugs": {
+    "url": "https://github.com/mariovalney/payload-simple-social-login/issues"
+  },
   "license": "MIT",
+  "author": "Mário Valney",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mariovalney/payload-simple-social-login.git"
+  },
   "type": "module",
   "exports": {
     ".": {
-      "import": "./src/index.ts",
       "types": "./src/index.ts",
+      "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
     "./client": {
-      "import": "./src/exports/client.ts",
       "types": "./src/exports/client.ts",
+      "import": "./src/exports/client.ts",
       "default": "./src/exports/client.ts"
     },
-    "./rsc": {
-      "import": "./src/exports/rsc.ts",
-      "types": "./src/exports/rsc.ts",
-      "default": "./src/exports/rsc.ts"
+    "./types": {
+      "types": "./src/exports/types.ts",
+      "import": "./src/exports/types.ts",
+      "default": "./src/exports/types.ts"
     }
   },
   "main": "./src/index.ts",
@@ -40,9 +59,13 @@
     "generate:types": "pnpm dev:generate-types",
     "lint": "eslint",
     "lint:fix": "eslint ./src --fix",
+    "prepublishOnly": "pnpm clean && pnpm build",
     "test": "pnpm test:int && pnpm test:e2e",
     "test:e2e": "playwright test",
     "test:int": "vitest"
+  },
+  "dependencies": {
+    "@payloadcms/ui": "3.84.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -51,7 +74,6 @@
     "@payloadcms/eslint-config": "3.28.0",
     "@payloadcms/next": "3.84.1",
     "@payloadcms/richtext-lexical": "3.84.1",
-    "@payloadcms/ui": "3.84.1",
     "@playwright/test": "1.58.2",
     "@swc-node/register": "1.10.9",
     "@swc/cli": "0.6.0",
@@ -78,7 +100,9 @@
     "vitest": "4.0.18"
   },
   "peerDependencies": {
-    "payload": "^3.84.1"
+    "payload": "^3.84.1",
+    "react": "^19.0.0 || ^18.0.0",
+    "react-dom": "^19.0.0 || ^18.0.0"
   },
   "engines": {
     "node": "^18.20.2 || >=20.9.0",
@@ -87,30 +111,23 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "import": "./dist/index.js",
         "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
         "default": "./dist/index.js"
       },
       "./client": {
-        "import": "./dist/exports/client.js",
         "types": "./dist/exports/client.d.ts",
+        "import": "./dist/exports/client.js",
         "default": "./dist/exports/client.js"
       },
-      "./rsc": {
-        "import": "./dist/exports/rsc.js",
-        "types": "./dist/exports/rsc.d.ts",
-        "default": "./dist/exports/rsc.js"
+      "./types": {
+        "types": "./dist/exports/types.d.ts",
+        "import": "./dist/exports/types.js",
+        "default": "./dist/exports/types.js"
       }
     },
     "main": "./dist/index.js",
-    "types": "./dist/index.d.ts"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "sharp",
-      "esbuild",
-      "unrs-resolver"
-    ]
-  },
-  "registry": "https://registry.npmjs.org/"
+    "types": "./dist/index.d.ts",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

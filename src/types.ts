@@ -26,7 +26,7 @@ export type ProviderConfig = {
 }
 
 /** Google-specific options beyond {@link ProviderConfig}. */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Google fields TBD
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- no Google-only options yet
 export type GoogleProviderSpecific = {}
 
 export type GoogleProviderConfig = GoogleProviderSpecific & ProviderConfig

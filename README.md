@@ -4,6 +4,8 @@ A Payload CMS plugin for social login (OAuth) on the admin panel and authenticat
 
 It adds an “or login with” UI to the login form and OAuth endpoints per provider. Supported in this version: **Google** and **Microsoft** (Entra ID).
 
+This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html) (`MAJOR.MINOR.PATCH`). See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ## Installation
 
 Install the package, add the plugin to your Payload config, then regenerate the admin import map so the login buttons resolve:
@@ -20,7 +22,9 @@ Without this step, the `afterLogin` social buttons may not appear in the admin p
 ## Configuration
 
 ```ts
+import { buildConfig } from 'payload'
 import { payloadSimpleSocialLogin } from 'payload-simple-social-login'
+import type { FindUserCallback } from 'payload-simple-social-login/types'
 
 export default buildConfig({
   // ...
@@ -30,20 +34,37 @@ export default buildConfig({
         google: {
           clientId: process.env.GOOGLE_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+          // callbackURL: '/auth/google/callback',
+          // loginUrl: '/auth/google/login',
+          // label: 'Continue with Google',
         },
         microsoft: {
           clientId: process.env.MICROSOFT_CLIENT_ID!,
           clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
-          // tenant: 'common', // default
+          // tenant: 'common',
         },
       },
-      // Optional. When omitted, defaults to [{ collection: admin.user }] with email match.
       // collections: [{ collection: 'users' }],
       showButtonOnLogin: true,
+      // disabled: false,
     }),
   ],
 })
 ```
+
+### Options
+
+| Option | Description |
+| --- | --- |
+| `providers` | Required. Enable `google` and/or `microsoft` with `clientId` / `clientSecret`. |
+| `providers.*.callbackURL` | OAuth callback path. Default `/auth/{providerId}/callback` (public URL under `routes.api`). |
+| `providers.*.loginUrl` | Login start path (button `href` + endpoint). Default `/auth/{providerId}/login`. |
+| `providers.*.label` | Button label; falls back to plugin i18n. |
+| `providers.microsoft.tenant` | Entra tenant segment. Default `common`. |
+| `collections` | Auth collections to resolve users for. When omitted: `[{ collection: admin.user }]` with email match. |
+| `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail`. |
+| `showButtonOnLogin` | Show buttons on the admin login form. Default `true`. |
+| `disabled` | Skip registering endpoints and UI. Default `false`. |
 
 ### Finding users
 
@@ -92,11 +113,28 @@ collections: [
 ]
 ```
 
+### Errors
+
+OAuth callback failures redirect to the admin login form with `?ssl-error=<code>` and a toast:
+
+| Code | When | Toast |
+| --- | --- | --- |
+| `login` | Invalid/missing state, missing code, IdP error, token/profile failure, missing `profileEmail` | Generic “try again” |
+| `not-found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
+
+### Out of scope
+
+- Built-in auto-create of auth users (use `findUserCallback`)
+- Built-in OAuth account link/unlink (custom collection + `findUserCallback`)
+- Social login UI outside the admin panel
+- Providers other than Google and Microsoft
+- IdP logout / token revocation (this plugin does not store provider tokens; Payload session logout is enough)
+
 ## Provider profiles
 
 After a successful OAuth callback, the plugin loads the user profile from the IdP (**not** by decoding the access token). You receive it as `profile` in `findUserCallback`, plus normalized `profileEmail` / `profileId`.
 
-Use the exported TypeScript types `GoogleUserInfoProfile` and `MicrosoftGraphMeProfile` for field names and JSDoc. Extra keys may appear depending on scopes / tenant; treat unknown fields as optional.
+Use the exported TypeScript types from `payload-simple-social-login/types` (`GoogleUserInfoProfile`, `MicrosoftGraphMeProfile`, `FindUserCallback`, etc.). Extra keys may appear depending on scopes / tenant; treat unknown fields as optional.
 
 ### Google (OpenID Connect UserInfo)
 
@@ -160,50 +198,9 @@ Typical **default** payload (fictional) — Graph returns only this common subse
 | `businessPhones`, `jobTitle`, `mobilePhone`, `officeLocation`, `preferredLanguage` | Often empty/`null` depending on the account |
 | `@odata.context` | Graph metadata URL; ignore for matching |
 
-## Development
+## Developing this plugin
 
-Local environment for developing and testing the plugin (`dev/`).
-
-### Prerequisites
-
-- Node.js
-- pnpm
-
-### Setup
-
-From the repository root:
-
-```bash
-pnpm install
-cp dev/.env.example dev/.env
-```
-
-Set a `PAYLOAD_SECRET` in `dev/.env`.
-
-### Run the test app
-
-From the repository root:
-
-```bash
-pnpm dev
-```
-
-Open [http://localhost:3000/admin](http://localhost:3000/admin).
-
-The database is SQLite (`dev/payload.db`), created automatically — no external MongoDB required.
-
-### Test credentials
-
-The seed creates an admin user if one does not already exist:
-
-| Field    | Value                |
-| -------- | -------------------- |
-| Email    | `dev@payloadcms.com` |
-| Password | `test`               |
-
-### Commits
-
-Use the **commit** skill (`/commit`, `.agents/skills/commit/`) for all commits. Do not invent ad-hoc messages outside that workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## References
 

@@ -14,20 +14,6 @@ import { createEnabledProviders } from './providers/createProvider.js'
 import { translations } from './translations/index.js'
 import { resolveProviderUrls } from './utils/resolveProviderUrls.js'
 
-export type {
-  CollectionSocialLoginConfig,
-  FindUserCallback,
-  FindUserCallbackArgs,
-  GoogleProviderConfig,
-  GoogleUserInfoProfile,
-  MicrosoftGraphMeProfile,
-  MicrosoftProviderConfig,
-  PayloadSimpleSocialLoginConfig,
-  SocialLoginUser,
-  SocialProviderId,
-  SocialProviderProfile,
-} from './types.js'
-
 const resolveCollections = ({
   config,
   pluginOptions,

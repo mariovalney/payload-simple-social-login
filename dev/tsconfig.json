@@ -24,8 +24,8 @@
       "payload-simple-social-login/client": [
         "../src/exports/client.ts"
       ],
-      "payload-simple-social-login/rsc": [
-        "../src/exports/rsc.ts"
+      "payload-simple-social-login/types": [
+        "../src/exports/types.ts"
       ]
     },
     "noEmit": true,

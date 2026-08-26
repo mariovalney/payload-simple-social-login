@@ -56,6 +56,37 @@ export default buildConfig({
   },
   plugins: [
     payloadSimpleSocialLogin({
+      collections: [
+        {
+          collection: 'users',
+          findUserCallback: async ({ payload, profileEmail }) => {
+            if (!profileEmail) {
+              return null
+            }
+
+            const result = await payload.find({
+              collection: 'users',
+              limit: 1,
+              overrideAccess: true,
+              where: {
+                email: {
+                  equals: profileEmail,
+                },
+              },
+            })
+
+            const doc = result.docs[0]
+            if (!doc) {
+              return null
+            }
+
+            return {
+              id: doc.id,
+              email: typeof doc.email === 'string' ? doc.email : profileEmail,
+            }
+          },
+        },
+      ],
       providers: {
         google: {
           clientId: process.env.SOCIAL_LOGIN_GOOGLE_CLIENT_ID || '',

@@ -501,4 +501,233 @@ describe('Plugin integration tests', () => {
     )
     expect(tenantUrl.pathname).toBe('/contoso.onmicrosoft.com/oauth2/v2.0/authorize')
   })
+
+  test('custom loginUrl and callbackURL register matching endpoints', () => {
+    const baseConfig = {
+      admin: { user: 'users' },
+      collections: [],
+      secret: 'test',
+    } as unknown as Config
+
+    const next = payloadSimpleSocialLogin({
+      providers: {
+        google: {
+          ...dummyGoogle,
+          callbackURL: '/oauth/google/done',
+          loginUrl: '/oauth/google/start',
+        },
+      },
+    })(baseConfig)
+
+    expect(next.endpoints?.some((endpoint) => endpoint.path === '/oauth/google/start')).toBe(true)
+    expect(next.endpoints?.some((endpoint) => endpoint.path === '/oauth/google/done')).toBe(true)
+
+    const buttonHref = (
+      next.admin?.components?.afterLogin?.find(
+        (entry) =>
+          typeof entry === 'object' &&
+          entry !== null &&
+          'path' in entry &&
+          entry.path === 'payload-simple-social-login/client#SocialLoginButtons',
+      ) as { clientProps?: { providers?: Array<{ href: string }> } } | undefined
+    )?.clientProps?.providers?.[0]?.href
+
+    expect(buttonHref).toBe('/api/oauth/google/start')
+  })
+
+  test('login endpoint uses custom callbackURL in redirect_uri', async () => {
+    const baseConfig = {
+      admin: { user: 'users' },
+      collections: [],
+      secret: 'test',
+    } as unknown as Config
+
+    const next = payloadSimpleSocialLogin({
+      providers: {
+        google: {
+          ...dummyGoogle,
+          callbackURL: '/oauth/google/done',
+          loginUrl: '/oauth/google/start',
+        },
+      },
+    })(baseConfig)
+
+    const endpoint = next.endpoints?.find(
+      (item) => item.path === '/oauth/google/start' && item.method === 'get',
+    )
+    expect(endpoint).toBeDefined()
+
+    const request = new Request('http://localhost:3000/api/oauth/google/start', { method: 'GET' })
+    const payloadRequest = await createPayloadRequest({ config, request })
+    const response = await endpoint!.handler(payloadRequest)
+    expect(response.status).toBe(302)
+
+    const location = response.headers.get('location')
+    expect(location).toBeTruthy()
+    const authorizeUrl = new URL(location!)
+    expect(authorizeUrl.searchParams.get('redirect_uri')).toBe(
+      'http://localhost:3000/api/oauth/google/done',
+    )
+  })
+
+  test('normalizeProviderProfile maps google and microsoft fields', async () => {
+    const { normalizeProviderProfile } = await import('../src/utils/normalizeProviderProfile.js')
+
+    expect(
+      normalizeProviderProfile({
+        profile: { email: 'ada@example.com', sub: 'google-sub-1' },
+        provider: 'google',
+      }),
+    ).toEqual({
+      profileEmail: 'ada@example.com',
+      profileId: 'google-sub-1',
+    })
+
+    expect(
+      normalizeProviderProfile({
+        profile: {
+          id: 'ms-id-1',
+          mail: null,
+          userPrincipalName: 'ada@contoso.com',
+        },
+        provider: 'microsoft',
+      }),
+    ).toEqual({
+      profileEmail: 'ada@contoso.com',
+      profileId: 'ms-id-1',
+    })
+  })
+
+  test('callback redirects with login error when profile has no email', async () => {
+    const state = 'valid-oauth-state-value'
+    const profile = { sub: 'google-user-no-email' }
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json(profile))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
+        {
+          headers: {
+            Cookie: `payload-ssl-state-google=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const payloadRequest = await createPayloadRequest({ config, request })
+      const endpoint = payload.config.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+
+      expect(endpoint).toBeDefined()
+      const response = await endpoint!.handler(payloadRequest)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('custom findUserCallback can allow or deny login', async () => {
+    const state = 'valid-oauth-state-value'
+    const profile = { email: 'dev@payloadcms.com', sub: 'google-user-custom' }
+
+    const allowConfig = payloadSimpleSocialLogin({
+      collections: [
+        {
+          collection: 'users',
+          findUserCallback: async ({ payload: p, profileEmail }) => {
+            if (!profileEmail) {
+              return null
+            }
+            const result = await p.find({
+              collection: 'users',
+              limit: 1,
+              overrideAccess: true,
+              where: { email: { equals: profileEmail } },
+            })
+            const doc = result.docs[0]
+            return doc ? { id: doc.id, email: doc.email } : null
+          },
+        },
+      ],
+      providers: { google: dummyGoogle },
+    })({
+      admin: { user: 'users' },
+      collections: [],
+      secret: 'test',
+    } as unknown as Config)
+
+    const denyConfig = payloadSimpleSocialLogin({
+      collections: [
+        {
+          collection: 'users',
+          findUserCallback: () => Promise.resolve(null),
+        },
+      ],
+      providers: { google: dummyGoogle },
+    })({
+      admin: { user: 'users' },
+      collections: [],
+      secret: 'test',
+    } as unknown as Config)
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json(profile))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
+        {
+          headers: {
+            Cookie: `payload-ssl-state-google=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const allowEndpoint = allowConfig.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+      const denyEndpoint = denyConfig.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+      expect(allowEndpoint).toBeDefined()
+      expect(denyEndpoint).toBeDefined()
+
+      const allowRequest = await createPayloadRequest({ config, request: request.clone() })
+      const allowResponse = await allowEndpoint!.handler(allowRequest)
+      expect(allowResponse.status).toBe(302)
+      expect(allowResponse.headers.get('location')).toBe('/admin')
+
+      const denyRequest = await createPayloadRequest({ config, request: request.clone() })
+      const denyResponse = await denyEndpoint!.handler(denyRequest)
+      expect(denyResponse.status).toBe(302)
+      expect(denyResponse.headers.get('location')).toBe('/admin/login?ssl-error=not-found')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
 })
