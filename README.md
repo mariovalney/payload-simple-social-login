@@ -38,8 +38,9 @@ Set a `PAYLOAD_SECRET` in `dev/.env`.
 
 ### Run the test app
 
+From the repository root:
+
 ```bash
-cd dev
 pnpm dev
 ```
 

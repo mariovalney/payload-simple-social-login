@@ -20,7 +20,7 @@ describe('Plugin integration tests', () => {
   test('plugin loads with the Payload config', () => {
     expect(payload).toBeDefined()
     expect(payload.collections['users']).toBeDefined()
-    expect(payload.collections['plugin-collection']).toBeUndefined()
+    expect(payload.collections).not.toHaveProperty('plugin-collection')
   })
 
   test('disabled plugin returns config unchanged for endpoints', () => {
