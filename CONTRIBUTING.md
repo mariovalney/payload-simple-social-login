@@ -81,3 +81,5 @@ Use the **commit** skill at [`.agents/skills/commit/SKILL.md`](.agents/skills/co
 ## Tests worth knowing
 
 Integration tests live in `dev/int.spec.ts` and cover provider registration, OAuth state, token/profile mocks, find-user / session redirect, custom paths, and `findUserCallback` allow/deny. Run with `pnpm test:int`.
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on pushes and PRs to `main`: `pnpm lint`, `pnpm test:int`, and `pnpm build`. Playwright e2e is not in CI yet.
