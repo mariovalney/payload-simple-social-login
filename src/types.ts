@@ -48,8 +48,130 @@ export type MicrosoftProviderConfig = MicrosoftProviderSpecific & ProviderConfig
 
 export type SocialProviderId = 'google' | 'microsoft'
 
+/**
+ * Google UserInfo response (`GET https://openidconnect.googleapis.com/v1/userinfo`).
+ *
+ * Official field list:
+ * {@link https://developers.google.com/identity/openid-connect/reference#userinfofields | Google OpenID Connect — UserInfo fields}
+ *
+ * Example (fictional):
+ * ```ts
+ * {
+ *   sub: '100000000000000000001',
+ *   name: 'Ada Lovelace',
+ *   given_name: 'Ada',
+ *   family_name: 'Lovelace',
+ *   picture: 'https://lh3.googleusercontent.com/a/example-avatar',
+ *   email: 'ada.lovelace@example.com',
+ *   email_verified: true,
+ *   hd: 'example.com', // Google Workspace only; omitted for personal Gmail
+ * }
+ * ```
+ *
+ * For matching a Payload user, prefer `email` (and optionally `email_verified`) plus
+ * stable IdP id `sub`.
+ */
+export type GoogleUserInfoProfile = {
+  /** User email address (requires `email` scope). */
+  email?: string
+  /** Whether Google has verified the email address. */
+  email_verified?: boolean
+  /** Surname / last name (requires `profile` scope). */
+  family_name?: string
+  /** Given / first name (requires `profile` scope). */
+  given_name?: string
+  /**
+   * Hosted domain for Google Workspace / Cloud Identity accounts
+   * (e.g. `example.com`). Absent for consumer Gmail accounts.
+   */
+  hd?: string
+  /** Displayable full name (requires `profile` scope). */
+  name?: string
+  /** Profile picture URL (requires `profile` scope). */
+  picture?: string
+  /**
+   * Stable Google account identifier. Unique across Google Accounts and never reused.
+   * Prefer this over email when linking accounts long-term.
+   */
+  sub: string
+}
+
+/**
+ * Default Microsoft Graph `/me` user properties
+ * (`GET https://graph.microsoft.com/v1.0/me`).
+ *
+ * Graph returns only a **subset** of user fields by default. Full resource:
+ * {@link https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0 | user resource type};
+ * default set / `$select`:
+ * {@link https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0 | Get user}.
+ *
+ * Example (fictional):
+ * ```ts
+ * {
+ *   '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#users/$entity',
+ *   businessPhones: [],
+ *   displayName: 'Ada Lovelace',
+ *   givenName: 'Ada',
+ *   jobTitle: null,
+ *   mail: 'ada.lovelace@contoso.com',
+ *   mobilePhone: null,
+ *   officeLocation: null,
+ *   preferredLanguage: null,
+ *   surname: 'Lovelace',
+ *   userPrincipalName: 'ada.lovelace@contoso.com',
+ *   id: '00000000-0000-0000-0000-000000000001',
+ * }
+ * ```
+ *
+ * For matching a Payload user, prefer `mail` (fallback `userPrincipalName` when
+ * `mail` is null) plus stable IdP id `id`.
+ */
+export type MicrosoftGraphMeProfile = {
+  /** OData metadata URL; present on Graph JSON responses. */
+  '@odata.context'?: string
+  /** Business / work phone numbers. */
+  businessPhones?: string[]
+  /** Name shown in the address book. */
+  displayName?: null | string
+  /** First / given name. */
+  givenName?: null | string
+  /**
+   * Stable Microsoft identity object id (GUID). Prefer this over email when
+   * linking accounts long-term.
+   */
+  id: string
+  /** Job title. */
+  jobTitle?: null | string
+  /**
+   * SMTP email address. May be `null` for some personal or incomplete accounts —
+   * then use `userPrincipalName`.
+   */
+  mail?: null | string
+  /** Mobile phone number. */
+  mobilePhone?: null | string
+  /** Physical office location. */
+  officeLocation?: null | string
+  /** Preferred UI language (e.g. `en-US`). */
+  preferredLanguage?: null | string
+  /** Last / family name. */
+  surname?: null | string
+  /**
+   * User principal name (sign-in name), often `user@tenant.onmicrosoft.com` or
+   * a verified email domain.
+   */
+  userPrincipalName?: null | string
+}
+
+/** Profile shape returned by {@link SocialProviderId} after OAuth userinfo / Graph. */
+export type SocialProviderProfile = GoogleUserInfoProfile | MicrosoftGraphMeProfile
+
 export type FindUserCallbackArgs = {
   payload: Payload
+  /**
+   * Raw IdP profile from UserInfo (Google) or Graph `/me` (Microsoft).
+   * Narrow with `provider`, or cast to {@link GoogleUserInfoProfile} /
+   * {@link MicrosoftGraphMeProfile}. See those types for fields and docs links.
+   */
   profile: Record<string, unknown>
   provider: SocialProviderId
 }

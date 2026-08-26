@@ -5,6 +5,7 @@ import { createPayloadRequest, getPayload } from 'payload'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 import { payloadSimpleSocialLogin } from '../src/index.js'
+import { GoogleProvider } from '../src/providers/google.js'
 import { MicrosoftProvider } from '../src/providers/microsoft.js'
 
 const dummyGoogle = {
@@ -48,7 +49,7 @@ describe('Plugin integration tests', () => {
     expect(next.admin?.components?.views?.['social-login-google']).toBeUndefined()
   })
 
-  test('appends SocialLoginButtons to afterLogin and preserves existing entries', () => {
+  test('appends SocialLoginErrorToast and SocialLoginButtons to afterLogin and preserves existing entries', () => {
     const existingAfterLogin = '/components/ExistingAfterLogin'
     const baseConfig = {
       admin: {
@@ -70,10 +71,13 @@ describe('Plugin integration tests', () => {
     })(baseConfig)
 
     const afterLogin = next.admin?.components?.afterLogin
-    expect(afterLogin).toHaveLength(2)
+    expect(afterLogin).toHaveLength(3)
     expect(afterLogin?.[0]).toBe(existingAfterLogin)
+    expect(afterLogin?.[1]).toMatchObject({
+      path: 'payload-simple-social-login/client#SocialLoginErrorToast',
+    })
 
-    const social = afterLogin?.[1]
+    const social = afterLogin?.[2]
     expect(social).toMatchObject({
       clientProps: {
         providers: [
@@ -88,7 +92,7 @@ describe('Plugin integration tests', () => {
     })
   })
 
-  test('showButtonOnLogin false does not register afterLogin component', () => {
+  test('showButtonOnLogin false still registers SocialLoginErrorToast', () => {
     const baseConfig = {
       collections: [],
       secret: 'test',
@@ -102,7 +106,11 @@ describe('Plugin integration tests', () => {
     })(baseConfig)
 
     expect(next.endpoints?.some((endpoint) => endpoint.path === '/auth/google/login')).toBe(true)
-    expect(next.admin?.components?.afterLogin).toBeUndefined()
+    expect(next.admin?.components?.afterLogin).toEqual([
+      {
+        path: 'payload-simple-social-login/client#SocialLoginErrorToast',
+      },
+    ])
   })
 
   test('disabled plugin does not register provider endpoints or afterLogin', () => {
@@ -128,7 +136,7 @@ describe('Plugin integration tests', () => {
     expect(next.admin?.components?.afterLogin).toEqual(['/components/ExistingAfterLogin'])
   })
 
-  test('callback rejects missing or invalid oauth state', async () => {
+  test('callback redirects to admin login when oauth state is missing or invalid', async () => {
     const endpoint = payload.config.endpoints?.find(
       (item) => item.path === '/auth/google/callback' && item.method === 'get',
     )
@@ -139,12 +147,8 @@ describe('Plugin integration tests', () => {
     })
     const missingPayloadRequest = await createPayloadRequest({ config, request: missingRequest })
     const missingResponse = await endpoint!.handler(missingPayloadRequest)
-    expect(missingResponse.status).toBe(400)
-    await expect(missingResponse.json()).resolves.toMatchObject({
-      error: 'invalid_state',
-      ok: false,
-      provider: 'google',
-    })
+    expect(missingResponse.status).toBe(302)
+    expect(missingResponse.headers.get('location')).toBe('/admin/login?ssl-error=1')
 
     const mismatchRequest = new Request(
       'http://localhost:3000/api/auth/google/callback?state=query-state',
@@ -160,10 +164,11 @@ describe('Plugin integration tests', () => {
       request: mismatchRequest,
     })
     const mismatchResponse = await endpoint!.handler(mismatchPayloadRequest)
-    expect(mismatchResponse.status).toBe(400)
+    expect(mismatchResponse.status).toBe(302)
+    expect(mismatchResponse.headers.get('location')).toBe('/admin/login?ssl-error=1')
   })
 
-  test('callback accepts matching oauth state and clears cookie', async () => {
+  test('callback redirects to admin login when authorization code is missing', async () => {
     const state = 'valid-oauth-state-value'
     const request = new Request(
       `http://localhost:3000/api/auth/google/callback?state=${state}`,
@@ -182,18 +187,175 @@ describe('Plugin integration tests', () => {
 
     expect(endpoint).toBeDefined()
     const response = await endpoint!.handler(payloadRequest)
-    expect(response.status).toBe(200)
-
-    const data = await response.json()
-    expect(data).toMatchObject({
-      type: 'callback',
-      ok: true,
-      provider: 'google',
-    })
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
 
     const setCookie = response.headers.get('set-cookie')
     expect(setCookie).toContain('payload-ssl-state-google=')
     expect(setCookie).toMatch(/Max-Age=0|Expires=/i)
+  })
+
+  test('callback redirects to admin login when IdP returns error query', async () => {
+    const state = 'valid-oauth-state-value'
+    const request = new Request(
+      `http://localhost:3000/api/auth/google/callback?state=${state}&error=access_denied`,
+      {
+        headers: {
+          Cookie: `payload-ssl-state-google=${state}`,
+        },
+        method: 'GET',
+      },
+    )
+
+    const payloadRequest = await createPayloadRequest({ config, request })
+    const endpoint = payload.config.endpoints?.find(
+      (item) => item.path === '/auth/google/callback' && item.method === 'get',
+    )
+
+    expect(endpoint).toBeDefined()
+    const response = await endpoint!.handler(payloadRequest)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
+  })
+
+  test('callback exchanges code and returns profile when IdP calls succeed', async () => {
+    const state = 'valid-oauth-state-value'
+    const profile = { email: 'dev@example.com', sub: 'google-user-1' }
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(
+          Response.json({ access_token: 'google-access-token', token_type: 'Bearer' }),
+        )
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer google-access-token',
+        })
+        return Promise.resolve(Response.json(profile))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
+        {
+          headers: {
+            Cookie: `payload-ssl-state-google=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const payloadRequest = await createPayloadRequest({ config, request })
+      const endpoint = payload.config.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+
+      expect(endpoint).toBeDefined()
+      const response = await endpoint!.handler(payloadRequest)
+      expect(response.status).toBe(200)
+
+      const data = await response.json()
+      expect(data).toMatchObject({
+        type: 'callback',
+        ok: true,
+        profile,
+        provider: 'google',
+      })
+
+      const setCookie = response.headers.get('set-cookie')
+      expect(setCookie).toContain('payload-ssl-state-google=')
+      expect(setCookie).toMatch(/Max-Age=0|Expires=/i)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('callback redirects to admin login when token exchange fails', async () => {
+    const state = 'valid-oauth-state-value'
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = (() =>
+      Promise.resolve(Response.json({ error: 'invalid_grant' }, { status: 400 }))) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/auth/google/callback?state=${state}&code=bad-code`,
+        {
+          headers: {
+            Cookie: `payload-ssl-state-google=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const payloadRequest = await createPayloadRequest({ config, request })
+      const endpoint = payload.config.endpoints?.find(
+        (item) => item.path === '/auth/google/callback' && item.method === 'get',
+      )
+
+      expect(endpoint).toBeDefined()
+      const response = await endpoint!.handler(payloadRequest)
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=1')
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('google and microsoft providers exchange code and fetch profile', async () => {
+    const google = new GoogleProvider(dummyGoogle)
+    const microsoft = new MicrosoftProvider({
+      clientId: 'ms-client',
+      clientSecret: 'ms-secret',
+    })
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'g-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json({ email: 'g@example.com', sub: 'g1' }))
+      }
+      if (url.includes('login.microsoftonline.com') && url.includes('/token')) {
+        return Promise.resolve(Response.json({ access_token: 'ms-token' }))
+      }
+      if (url.includes('graph.microsoft.com/v1.0/me')) {
+        return Promise.resolve(Response.json({ id: 'ms1', mail: 'ms@example.com' }))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      await expect(
+        google.exchangeCode({
+          code: 'code',
+          redirectUri: 'http://localhost:3000/api/auth/google/callback',
+        }),
+      ).resolves.toEqual({ accessToken: 'g-token' })
+      await expect(google.fetchProfile({ accessToken: 'g-token' })).resolves.toMatchObject({
+        email: 'g@example.com',
+      })
+
+      await expect(
+        microsoft.exchangeCode({
+          code: 'code',
+          redirectUri: 'http://localhost:3000/api/auth/microsoft/callback',
+        }),
+      ).resolves.toEqual({ accessToken: 'ms-token' })
+      await expect(microsoft.fetchProfile({ accessToken: 'ms-token' })).resolves.toMatchObject({
+        mail: 'ms@example.com',
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 
   test('login endpoint redirects with regenerated state cookie', async () => {

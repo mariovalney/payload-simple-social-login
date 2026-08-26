@@ -1,4 +1,4 @@
-import type { Endpoint, PayloadRequest } from 'payload'
+import type { Endpoint } from 'payload'
 
 import type { BaseProvider } from '../providers/base.js'
 
@@ -7,25 +7,7 @@ import {
   createOAuthState,
   isSecureRequest,
 } from '../utils/oauthState.js'
-
-const resolveAbsoluteCallbackUrl = ({
-  callbackURL,
-  req,
-}: {
-  callbackURL: string
-  req: PayloadRequest
-}): string => {
-  const apiRoute = (req.payload.config.routes?.api ?? '/api').replace(/\/$/, '') || '/api'
-  const path = `${apiRoute}${callbackURL.startsWith('/') ? callbackURL : `/${callbackURL}`}`
-
-  const serverURL = req.payload.config.serverURL?.replace(/\/$/, '')
-  if (serverURL) {
-    return `${serverURL}${path}`
-  }
-
-  const requestUrl = req.url ?? 'http://localhost'
-  return new URL(path, requestUrl).toString()
-}
+import { resolveAbsoluteCallbackUrl } from '../utils/resolveAbsoluteCallbackUrl.js'
 
 export const createLoginEndpoint = ({
   callbackURL,

@@ -15,9 +15,12 @@ export type {
   FindUserCallback,
   FindUserCallbackArgs,
   GoogleProviderConfig,
+  GoogleUserInfoProfile,
+  MicrosoftGraphMeProfile,
   MicrosoftProviderConfig,
   PayloadSimpleSocialLoginConfig,
-  SocialProviderId
+  SocialProviderId,
+  SocialProviderProfile,
 } from './types.js'
 
 export const payloadSimpleSocialLogin =
@@ -63,8 +66,9 @@ export const payloadSimpleSocialLogin =
           provider,
         }),
         createCallbackEndpoint({
+          callbackURL,
           path: callbackURL,
-          providerId: provider.id,
+          provider,
         }),
       )
 
@@ -77,20 +81,27 @@ export const payloadSimpleSocialLogin =
 
     config.endpoints = [...(config.endpoints ?? []), ...providerEndpoints]
 
-    if (pluginOptions.showButtonOnLogin !== false && buttonProviders.length > 0) {
+    if (enabledProviders.length > 0) {
+      const afterLogin = [...(config.admin?.components?.afterLogin ?? [])]
+
+      afterLogin.push({
+        path: 'payload-simple-social-login/client#SocialLoginErrorToast',
+      })
+
+      if (pluginOptions.showButtonOnLogin !== false && buttonProviders.length > 0) {
+        afterLogin.push({
+          clientProps: {
+            providers: buttonProviders,
+          },
+          path: 'payload-simple-social-login/client#SocialLoginButtons',
+        })
+      }
+
       config.admin = {
         ...(config.admin ?? {}),
         components: {
           ...(config.admin?.components ?? {}),
-          afterLogin: [
-            ...(config.admin?.components?.afterLogin ?? []),
-            {
-              clientProps: {
-                providers: buttonProviders,
-              },
-              path: 'payload-simple-social-login/client#SocialLoginButtons',
-            },
-          ],
+          afterLogin,
         },
       }
     }
