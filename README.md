@@ -98,6 +98,21 @@ After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each
 
 **Link / unlink of OAuth accounts is also out of scope.** If you need that, model your own collection (e.g. `oauth-accounts` with `provider`, `profileId`, relation to the user) and override `findUserCallback` to resolve users through it.
 
+#### Example: autoVerify
+
+Use when the collection has `auth: { verify: true }` and a successful OAuth login is enough to mark the existing Payload user verified. Does not create users; only sets `_verified: true` on match. 
+
+**Has no effect if you set `findUserCallback`** — then you own `_verified` yourself.
+
+```ts
+collections: [
+  {
+    collection: 'users',
+    autoVerify: true,
+  },
+]
+```
+
 #### Example: find-or-create (app-owned)
 
 ```ts
@@ -140,7 +155,7 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 | --- | --- | --- |
 | `login` | Invalid/missing state, missing code, IdP error, token/profile failure, missing `profileEmail` | Generic “try again” |
 | `not-found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
-| `unverified` | Default findUser: collection has `auth.verify` and matched user has `_verified: false` | Please verify your email before logging in |
+| `unverified` | Default findUser: collection has `auth.verify`, matched user has `_verified: false`, and `autoVerify` is not enabled | Please verify your email before logging in |
 
 ### Out of scope
 
