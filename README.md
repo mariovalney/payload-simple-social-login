@@ -157,11 +157,68 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 | `not-found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
 | `unverified` | Default findUser: collection has `auth.verify`, matched user has `_verified: false`, and `autoVerify` is not enabled | Please verify your email before logging in |
 
+### Custom endpoints
+
+Use `createSocialAuthEndpoints` when you need extra OAuth flows (frontend app, account linking, JSON callback) without duplicating provider logic. It accepts the **same** provider config as the plugin (`clientId`, `clientSecret`, optional `loginUrl` / `callbackURL`, `tenant` for Microsoft).
+
+Register the returned pair on `config.endpoints`. You do **not** need the plugin in `plugins[]` for custom-only flows; use both when you want admin login plus extra URLs.
+
+**Admin default (plugin):** pass `collections` and omit `onSuccess`. Same as `payloadSimpleSocialLogin`: find user, JWT cookie, redirect to `/admin`.
+
+**Custom flow:** pass `onSuccess` (and optional `onError`). After token exchange and IdP profile fetch, your callback returns a `Response`. No automatic Payload login. Missing `profileEmail` does **not** abort the callback (`profileEmail` may be `null`).
+
+The callback endpoint always clears the OAuth `state` cookie on the final response. You do not set that cookie in `onSuccess` / `onError`.
+
+Each flow gets its own `state` cookie name from provider + `callbackURL`, so two Google flows (e.g. admin + app) do not overwrite each other. Register **each** redirect URI in the IdP console.
+
+```ts
+import { buildConfig } from 'payload'
+import { createSocialAuthEndpoints, payloadSimpleSocialLogin } from 'payload-simple-social-login'
+import type { SocialAuthOnSuccess } from 'payload-simple-social-login/types'
+
+const google = {
+  clientId: process.env.GOOGLE_CLIENT_ID!,
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+}
+
+const appGoogleSuccess: SocialAuthOnSuccess = async ({ req, profile, profileEmail }) => {
+  // Your logic: find-or-create, link account, issue your own session, etc.
+  return new Response(null, {
+    headers: { Location: '/app' },
+    status: 302,
+  })
+}
+
+export default buildConfig({
+  endpoints: [
+    ...createSocialAuthEndpoints({
+      provider: 'google',
+      ...google,
+      loginUrl: '/app/google/login',
+      callbackURL: '/app/google/callback',
+      onSuccess: appGoogleSuccess,
+      onError: () =>
+        new Response(null, {
+          headers: { Location: '/app/login?error=oauth' },
+          status: 302,
+        }),
+    }),
+  ],
+  plugins: [
+    payloadSimpleSocialLogin({
+      providers: { google },
+    }),
+  ],
+})
+```
+
+Types: `CreateSocialAuthEndpointsArgs`, `SocialAuthOnSuccess`, `SocialAuthOnSuccessArgs`, `SocialAuthOnError`, `SocialAuthOnErrorArgs`, `SocialAuthErrorCode` from `payload-simple-social-login/types`.
+
 ### Out of scope
 
 - Built-in auto-create of auth users (use `findUserCallback`)
 - Built-in OAuth account link/unlink (custom collection + `findUserCallback`)
-- Social login UI outside the admin panel
+- Social login UI outside the admin panel (use `createSocialAuthEndpoints` + your own UI)
 - Providers other than Google and Microsoft
 - IdP logout / token revocation (this plugin does not store provider tokens; Payload session logout is enough)
 

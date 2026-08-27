@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-08-27
+
+### Added
+
+- `createSocialAuthEndpoints`: public factory to register a login + callback pair with the same provider config as the plugin (`GoogleProviderConfig` / `MicrosoftProviderConfig`)
+- Optional `onSuccess` / `onError` callbacks on custom flows: receive token and IdP profile, return your own `Response` (no automatic Payload login)
+- Per-flow OAuth `state` cookies (`payload-auth-state-{provider}_{callback path}`) so multiple flows for the same provider do not overwrite each other
+
+### Notes
+
+- Default admin login (plugin without `onSuccess`) is unchanged: paths, `ssl-error` redirects, JWT session, and `findUserCallback` / `autoVerify` behavior
+- Custom flows do not require the plugin in `plugins[]`; register returned endpoints on `config.endpoints`
+- The callback endpoint always clears the OAuth `state` cookie on the final response; `onSuccess` / `onError` do not need to handle it
+- OAuth `state` cookie names changed from `payload-ssl-state-{provider}`; in-flight OAuth redirects (within ~10 minutes) may need to be restarted
+
 ## [1.0.2] - 2026-08-26
 
 ### Fixed
@@ -47,6 +62,7 @@ First stable release.
 - The plugin does not auto-create users or link/unlink OAuth accounts; apps own that via `findUserCallback` when needed
 - Provider access tokens are not stored; only the Payload session cookie is issued
 
+[1.1.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.0
 [1.0.2]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.2
 [1.0.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.1
 [1.0.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.0

@@ -4,14 +4,20 @@ import config from '@payload-config'
 import { createPayloadRequest, getPayload } from 'payload'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
-import { payloadSimpleSocialLogin } from '../src/index.js'
+import { createSocialAuthEndpoints, payloadSimpleSocialLogin } from '../src/index.js'
 import { GoogleProvider } from '../src/providers/google.js'
 import { MicrosoftProvider } from '../src/providers/microsoft.js'
+import { getOAuthStateCookieName } from '../src/utils/oauthState.js'
 
 const dummyGoogle = {
   clientId: 'test-google-client-id',
   clientSecret: 'test-google-client-secret',
 }
+
+const googleDefaultStateCookie = getOAuthStateCookieName({
+  callbackURL: '/auth/google/callback',
+  providerId: 'google',
+})
 
 let payload: Payload
 
@@ -154,7 +160,7 @@ describe('Plugin integration tests', () => {
       'http://localhost:3000/api/auth/google/callback?state=query-state',
       {
         headers: {
-          Cookie: 'payload-ssl-state-google=cookie-state',
+          Cookie: `${googleDefaultStateCookie}=cookie-state`,
         },
         method: 'GET',
       },
@@ -174,7 +180,7 @@ describe('Plugin integration tests', () => {
       `http://localhost:3000/api/auth/google/callback?state=${state}`,
       {
         headers: {
-          Cookie: `payload-ssl-state-google=${state}`,
+          Cookie: `${googleDefaultStateCookie}=${state}`,
         },
         method: 'GET',
       },
@@ -191,7 +197,7 @@ describe('Plugin integration tests', () => {
     expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
 
     const setCookie = response.headers.get('set-cookie')
-    expect(setCookie).toContain('payload-ssl-state-google=')
+    expect(setCookie).toContain(`${googleDefaultStateCookie}=`)
     expect(setCookie).toMatch(/Max-Age=0|Expires=/i)
   })
 
@@ -201,7 +207,7 @@ describe('Plugin integration tests', () => {
       `http://localhost:3000/api/auth/google/callback?state=${state}&error=access_denied`,
       {
         headers: {
-          Cookie: `payload-ssl-state-google=${state}`,
+          Cookie: `${googleDefaultStateCookie}=${state}`,
         },
         method: 'GET',
       },
@@ -245,7 +251,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -266,7 +272,7 @@ describe('Plugin integration tests', () => {
           ? response.headers.getSetCookie()
           : [response.headers.get('set-cookie')].filter(Boolean)
 
-      expect(cookies.some((cookie) => cookie?.includes('payload-ssl-state-google='))).toBe(true)
+      expect(cookies.some((cookie) => cookie?.includes(`${googleDefaultStateCookie}=`))).toBe(true)
       expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
       expect(cookies.some((cookie) => cookie?.includes('payload-token=') || cookie?.includes('-token='))).toBe(
         true,
@@ -298,7 +304,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -329,7 +335,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=bad-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -430,7 +436,7 @@ describe('Plugin integration tests', () => {
     expect(state!.length).toBeGreaterThan(16)
 
     const setCookie = response.headers.get('set-cookie')
-    expect(setCookie).toContain(`payload-ssl-state-google=${state}`)
+    expect(setCookie).toContain(`${googleDefaultStateCookie}=${state}`)
     expect(setCookie).toMatch(/HttpOnly/i)
     expect(setCookie).toMatch(/SameSite=Lax/i)
   })
@@ -620,7 +626,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -675,7 +681,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -759,7 +765,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -857,7 +863,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -934,7 +940,7 @@ describe('Plugin integration tests', () => {
         `http://localhost:3000/api/auth/google/callback?state=${state}&code=auth-code`,
         {
           headers: {
-            Cookie: `payload-ssl-state-google=${state}`,
+            Cookie: `${googleDefaultStateCookie}=${state}`,
           },
           method: 'GET',
         },
@@ -961,5 +967,190 @@ describe('Plugin integration tests', () => {
     } finally {
       globalThis.fetch = originalFetch
     }
+  })
+
+  test('custom onSuccess receives profile without email and does not issue Payload session', async () => {
+    const state = 'valid-oauth-state-value'
+    const profile = { sub: 'google-user-no-email-custom' }
+    const appStateCookie = getOAuthStateCookieName({
+      callbackURL: '/app/google/callback',
+      providerId: 'google',
+    })
+
+    const customConfig = {
+      admin: { user: 'users' },
+      collections: [],
+      endpoints: createSocialAuthEndpoints({
+        ...dummyGoogle,
+        callbackURL: '/app/google/callback',
+        loginUrl: '/app/google/login',
+        onSuccess: ({ profileEmail, profileId }) =>
+          Response.json({ profileEmail, profileId }),
+        provider: 'google',
+      }),
+      secret: 'test',
+    } as unknown as Config
+
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json(profile))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const request = new Request(
+        `http://localhost:3000/api/app/google/callback?state=${state}&code=auth-code`,
+        {
+          headers: {
+            Cookie: `${appStateCookie}=${state}`,
+          },
+          method: 'GET',
+        },
+      )
+
+      const endpoint = customConfig.endpoints?.find(
+        (item) => item.path === '/app/google/callback' && item.method === 'get',
+      )
+      expect(endpoint).toBeDefined()
+
+      const payloadRequest = await createPayloadRequest({ config, request })
+      const response = await endpoint!.handler(payloadRequest)
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({
+        profileEmail: null,
+        profileId: 'google-user-no-email-custom',
+      })
+
+      const cookies =
+        typeof response.headers.getSetCookie === 'function'
+          ? response.headers.getSetCookie()
+          : [response.headers.get('set-cookie')].filter(Boolean)
+
+      expect(cookies.some((cookie) => cookie?.includes(`${appStateCookie}=`))).toBe(true)
+      expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
+      expect(
+        cookies.some((cookie) => cookie?.includes('payload-token=') || cookie?.includes('-token=')),
+      ).toBe(false)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  test('two google flows use different state cookie names', async () => {
+    const adminCookie = getOAuthStateCookieName({
+      callbackURL: '/auth/google/callback',
+      providerId: 'google',
+    })
+    const appCookie = getOAuthStateCookieName({
+      callbackURL: '/app/google/callback',
+      providerId: 'google',
+    })
+
+    expect(adminCookie).toBe('payload-auth-state-google_auth-google-callback')
+    expect(appCookie).toBe('payload-auth-state-google_app-google-callback')
+    expect(adminCookie).not.toBe(appCookie)
+
+    const baseConfig = {
+      admin: { user: 'users' },
+      collections: [],
+      endpoints: [
+        ...createSocialAuthEndpoints({
+          ...dummyGoogle,
+          collections: [{ collection: 'users' }],
+          provider: 'google',
+        }),
+        ...createSocialAuthEndpoints({
+          ...dummyGoogle,
+          callbackURL: '/app/google/callback',
+          loginUrl: '/app/google/login',
+          onSuccess: () => Response.json({ ok: true }),
+          provider: 'google',
+        }),
+      ],
+      secret: 'test',
+    } as unknown as Config
+
+    const adminLogin = baseConfig.endpoints?.find(
+      (item) => item.path === '/auth/google/login' && item.method === 'get',
+    )
+    const appLogin = baseConfig.endpoints?.find(
+      (item) => item.path === '/app/google/login' && item.method === 'get',
+    )
+
+    expect(adminLogin).toBeDefined()
+    expect(appLogin).toBeDefined()
+
+    const adminRequest = await createPayloadRequest({
+      config,
+      request: new Request('http://localhost:3000/api/auth/google/login', { method: 'GET' }),
+    })
+    const appRequest = await createPayloadRequest({
+      config,
+      request: new Request('http://localhost:3000/api/app/google/login', { method: 'GET' }),
+    })
+
+    const adminResponse = await adminLogin!.handler(adminRequest)
+    const appResponse = await appLogin!.handler(appRequest)
+
+    expect(adminResponse.headers.get('set-cookie')).toContain(`${adminCookie}=`)
+    expect(appResponse.headers.get('set-cookie')).toContain(`${appCookie}=`)
+  })
+
+  test('custom onError returns app response and still clears state cookie', async () => {
+    const state = 'valid-oauth-state-value'
+    const appStateCookie = getOAuthStateCookieName({
+      callbackURL: '/app/google/callback',
+      providerId: 'google',
+    })
+
+    const customConfig = {
+      admin: { user: 'users' },
+      collections: [],
+      endpoints: createSocialAuthEndpoints({
+        ...dummyGoogle,
+        callbackURL: '/app/google/callback',
+        loginUrl: '/app/google/login',
+        onError: () =>
+          new Response(null, {
+            headers: { Location: '/app/login?error=oauth' },
+            status: 302,
+          }),
+        onSuccess: () => Response.json({ ok: true }),
+        provider: 'google',
+      }),
+      secret: 'test',
+    } as unknown as Config
+
+    const request = new Request(`http://localhost:3000/api/app/google/callback?state=${state}`, {
+      headers: {
+        Cookie: `${appStateCookie}=${state}`,
+      },
+      method: 'GET',
+    })
+
+    const endpoint = customConfig.endpoints?.find(
+      (item) => item.path === '/app/google/callback' && item.method === 'get',
+    )
+    expect(endpoint).toBeDefined()
+
+    const payloadRequest = await createPayloadRequest({ config, request })
+    const response = await endpoint!.handler(payloadRequest)
+    expect(response.status).toBe(302)
+    expect(response.headers.get('location')).toBe('/app/login?error=oauth')
+
+    const cookies =
+      typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : [response.headers.get('set-cookie')].filter(Boolean)
+
+    expect(cookies.some((cookie) => cookie?.includes(`${appStateCookie}=`))).toBe(true)
+    expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
   })
 })

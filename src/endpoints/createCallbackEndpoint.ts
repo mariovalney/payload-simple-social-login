@@ -1,13 +1,20 @@
 import type { Endpoint, PayloadRequest } from 'payload'
 
 import type { BaseProvider } from '../providers/base.js'
-import type { CollectionSocialLoginConfig, SocialLoginUser } from '../types.js'
+import type {
+  CollectionSocialLoginConfig,
+  SocialAuthErrorCode,
+  SocialAuthOnError,
+  SocialAuthOnSuccess,
+  SocialLoginUser,
+} from '../types.js'
 
 import { UnverifiedSocialUserError } from '../errors/UnverifiedSocialUserError.js'
 import { defaultFindUserByEmail } from '../utils/defaultFindUserByEmail.js'
 import { loginUserWithoutPassword } from '../utils/loginUserWithoutPassword.js'
 import { normalizeProviderProfile } from '../utils/normalizeProviderProfile.js'
 import {
+  appendClearStateCookie,
   clearOAuthStateCookie,
   isOAuthStateValid,
   isSecureRequest,
@@ -15,13 +22,12 @@ import {
 } from '../utils/oauthState.js'
 import { resolveAbsoluteCallbackUrl } from '../utils/resolveAbsoluteCallbackUrl.js'
 
-export type SslErrorCode = 'login' | 'not-found' | 'unverified'
+export type SslErrorCode = SocialAuthErrorCode
 
 const SSL_ERROR_QUERY = 'ssl-error'
 
 const redirectToLoginWithError = (
   req: PayloadRequest,
-  clearCookie: string,
   error: SslErrorCode = 'login',
 ): Response => {
   const adminRoute = (req.payload.config.routes?.admin ?? '/admin').replace(/\/$/, '') || '/admin'
@@ -30,24 +36,25 @@ const redirectToLoginWithError = (
   return new Response(null, {
     headers: {
       Location: location,
-      'Set-Cookie': clearCookie,
     },
     status: 302,
   })
 }
 
+const defaultCustomErrorResponse = (code: SslErrorCode): Response => {
+  const status = code === 'not-found' ? 404 : 400
+  return Response.json({ error: code }, { status })
+}
+
 const redirectToAdminWithSession = ({
   authCookie,
-  clearCookie,
   req,
 }: {
   authCookie: string
-  clearCookie: string
   req: PayloadRequest
 }): Response => {
   const adminRoute = (req.payload.config.routes?.admin ?? '/admin').replace(/\/$/, '') || '/admin'
   const headers = new Headers()
-  headers.append('Set-Cookie', clearCookie)
   headers.append('Set-Cookie', authCookie)
   headers.set('Location', adminRoute)
 
@@ -106,37 +113,134 @@ const resolveUserFromCollections = async ({
   return null
 }
 
+const completeAdminLogin = async ({
+  collections,
+  profile,
+  profileEmail,
+  profileId,
+  provider,
+  req,
+}: {
+  collections: CollectionSocialLoginConfig[]
+  profile: Record<string, unknown>
+  profileEmail: string
+  profileId: null | string
+  provider: BaseProvider
+  req: PayloadRequest
+}): Promise<Response> => {
+  const matched = await resolveUserFromCollections({
+    collections,
+    payload: req.payload,
+    profile,
+    profileEmail,
+    profileId,
+    providerId: provider.id,
+    req,
+  })
+
+  if (!matched) {
+    return redirectToLoginWithError(req, 'not-found')
+  }
+
+  const userWithEmail =
+    typeof matched.user.email === 'string' && matched.user.email.trim().length > 0
+      ? matched.user
+      : { ...matched.user, email: profileEmail }
+
+  const { authCookie } = await loginUserWithoutPassword({
+    collection: matched.collection,
+    req,
+    user: userWithEmail,
+  })
+
+  return redirectToAdminWithSession({
+    authCookie,
+    req,
+  })
+}
+
+const handleCallbackError = async ({
+  clearCookie,
+  code,
+  error,
+  onError,
+  onSuccess,
+  req,
+}: {
+  clearCookie: string
+  code: SslErrorCode
+  error?: unknown
+  onError?: SocialAuthOnError
+  onSuccess?: SocialAuthOnSuccess
+  req: PayloadRequest
+}): Promise<Response> => {
+  try {
+    if (onSuccess) {
+      const response = onError
+        ? await onError({ code, error, req })
+        : defaultCustomErrorResponse(code)
+      return appendClearStateCookie(response, clearCookie)
+    }
+
+    return appendClearStateCookie(redirectToLoginWithError(req, code), clearCookie)
+  } catch {
+    if (onSuccess) {
+      return appendClearStateCookie(defaultCustomErrorResponse(code), clearCookie)
+    }
+
+    return appendClearStateCookie(redirectToLoginWithError(req, code), clearCookie)
+  }
+}
+
 export const createCallbackEndpoint = ({
   callbackURL,
   collections,
+  onError,
+  onSuccess,
   path,
   provider,
+  stateCookieName,
 }: {
   callbackURL: string
-  collections: CollectionSocialLoginConfig[]
+  collections?: CollectionSocialLoginConfig[]
+  onError?: SocialAuthOnError
+  onSuccess?: SocialAuthOnSuccess
   path: string
   provider: BaseProvider
+  stateCookieName: string
 }): Endpoint => ({
   handler: async (req) => {
     const requestUrl = req.url ?? 'http://localhost'
     const secure = isSecureRequest(requestUrl)
-    const clearCookie = clearOAuthStateCookie({ providerId: provider.id, secure })
+    const clearCookie = clearOAuthStateCookie({ secure, stateCookieName })
 
     const url = new URL(requestUrl)
     const queryState = url.searchParams.get('state') ?? undefined
     const cookieState = readOAuthStateCookie({
       headers: req.headers,
-      providerId: provider.id,
+      stateCookieName,
     })
 
     if (!isOAuthStateValid({ cookieState, queryState })) {
-      return redirectToLoginWithError(req, clearCookie, 'login')
+      return handleCallbackError({
+        clearCookie,
+        code: 'login',
+        onError,
+        onSuccess,
+        req,
+      })
     }
 
     const idpError = url.searchParams.get('error')
     const code = url.searchParams.get('code')
     if (idpError || !code) {
-      return redirectToLoginWithError(req, clearCookie, 'login')
+      return handleCallbackError({
+        clearCookie,
+        code: 'login',
+        onError,
+        onSuccess,
+        req,
+      })
     }
 
     try {
@@ -151,45 +255,101 @@ export const createCallbackEndpoint = ({
         provider: provider.id,
       })
 
+      if (onSuccess) {
+        try {
+          const response = await onSuccess({
+            accessToken,
+            profile,
+            profileEmail,
+            profileId,
+            provider: provider.id,
+            req,
+          })
+          return appendClearStateCookie(response, clearCookie)
+        } catch (error) {
+          return handleCallbackError({
+            clearCookie,
+            code: 'login',
+            error,
+            onError,
+            onSuccess,
+            req,
+          })
+        }
+      }
+
+      if (!collections?.length) {
+        return handleCallbackError({
+          clearCookie,
+          code: 'login',
+          onError,
+          onSuccess,
+          req,
+        })
+      }
+
       if (!profileEmail) {
-        return redirectToLoginWithError(req, clearCookie, 'login')
+        return handleCallbackError({
+          clearCookie,
+          code: 'login',
+          onError,
+          onSuccess,
+          req,
+        })
       }
 
-      const matched = await resolveUserFromCollections({
-        collections,
-        payload: req.payload,
-        profile,
-        profileEmail,
-        profileId,
-        providerId: provider.id,
-        req,
-      })
+      try {
+        const response = await completeAdminLogin({
+          collections,
+          profile,
+          profileEmail,
+          profileId,
+          provider,
+          req,
+        })
 
-      if (!matched) {
-        return redirectToLoginWithError(req, clearCookie, 'not-found')
+        return appendClearStateCookie(response, clearCookie)
+      } catch (error) {
+        if (error instanceof UnverifiedSocialUserError) {
+          return handleCallbackError({
+            clearCookie,
+            code: 'unverified',
+            error,
+            onError,
+            onSuccess,
+            req,
+          })
+        }
+
+        return handleCallbackError({
+          clearCookie,
+          code: 'login',
+          error,
+          onError,
+          onSuccess,
+          req,
+        })
       }
-
-      const userWithEmail =
-        typeof matched.user.email === 'string' && matched.user.email.trim().length > 0
-          ? matched.user
-          : { ...matched.user, email: profileEmail }
-
-      const { authCookie } = await loginUserWithoutPassword({
-        collection: matched.collection,
-        req,
-        user: userWithEmail,
-      })
-
-      return redirectToAdminWithSession({
-        authCookie,
-        clearCookie,
-        req,
-      })
     } catch (error) {
       if (error instanceof UnverifiedSocialUserError) {
-        return redirectToLoginWithError(req, clearCookie, 'unverified')
+        return handleCallbackError({
+          clearCookie,
+          code: 'unverified',
+          error,
+          onError,
+          onSuccess,
+          req,
+        })
       }
-      return redirectToLoginWithError(req, clearCookie, 'login')
+
+      return handleCallbackError({
+        clearCookie,
+        code: 'login',
+        error,
+        onError,
+        onSuccess,
+        req,
+      })
     }
   },
   method: 'get',

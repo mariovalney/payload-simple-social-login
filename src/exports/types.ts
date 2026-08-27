@@ -1,5 +1,6 @@
 export type {
   CollectionSocialLoginConfig,
+  CreateSocialAuthEndpointsArgs,
   FindUserCallback,
   FindUserCallbackArgs,
   GoogleProviderConfig,
@@ -10,6 +11,11 @@ export type {
   MicrosoftProviderSpecific,
   PayloadSimpleSocialLoginConfig,
   ProviderConfig,
+  SocialAuthErrorCode,
+  SocialAuthOnError,
+  SocialAuthOnErrorArgs,
+  SocialAuthOnSuccess,
+  SocialAuthOnSuccessArgs,
   SocialLoginUser,
   SocialProviderId,
   SocialProviderProfile,

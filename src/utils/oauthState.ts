@@ -5,22 +5,39 @@ import type { SocialProviderId } from '../types.js'
 
 export const OAUTH_STATE_MAX_AGE_SECONDS = 600
 
-export const getOAuthStateCookieName = (providerId: SocialProviderId): string =>
-  `payload-ssl-state-${providerId}`
+export const normalizeCallbackPathForCookie = (callbackURL: string): string => {
+  const trimmed = callbackURL.trim().replace(/^\/+/, '')
+
+  return trimmed
+    .replace(/\//g, '-')
+    .replace(/[^a-z0-9-]/gi, '')
+    .toLowerCase()
+}
+
+export const getOAuthStateCookieName = ({
+  callbackURL,
+  providerId,
+}: {
+  callbackURL: string
+  providerId: SocialProviderId
+}): string => {
+  const normalized = normalizeCallbackPathForCookie(callbackURL)
+  return `payload-auth-state-${providerId}_${normalized}`
+}
 
 export const createOAuthState = (): string => randomBytes(32).toString('base64url')
 
 export const buildOAuthStateCookie = ({
-  providerId,
   secure,
   state,
+  stateCookieName,
 }: {
-  providerId: SocialProviderId
   secure: boolean
   state: string
+  stateCookieName: string
 }): string =>
   generateCookie({
-    name: getOAuthStateCookieName(providerId),
+    name: stateCookieName,
     httpOnly: true,
     maxAge: OAUTH_STATE_MAX_AGE_SECONDS,
     path: '/',
@@ -31,14 +48,14 @@ export const buildOAuthStateCookie = ({
   }) as string
 
 export const clearOAuthStateCookie = ({
-  providerId,
   secure,
+  stateCookieName,
 }: {
-  providerId: SocialProviderId
   secure: boolean
+  stateCookieName: string
 }): string =>
   generateCookie({
-    name: getOAuthStateCookieName(providerId),
+    name: stateCookieName,
     expires: new Date(0),
     httpOnly: true,
     path: '/',
@@ -50,13 +67,13 @@ export const clearOAuthStateCookie = ({
 
 export const readOAuthStateCookie = ({
   headers,
-  providerId,
+  stateCookieName,
 }: {
   headers: Headers
-  providerId: SocialProviderId
+  stateCookieName: string
 }): string | undefined => {
   const cookies = parseCookies(headers)
-  return cookies.get(getOAuthStateCookieName(providerId))
+  return cookies.get(stateCookieName)
 }
 
 export const isOAuthStateValid = ({
@@ -78,6 +95,17 @@ export const isOAuthStateValid = ({
   }
 
   return timingSafeEqual(cookieBuffer, queryBuffer)
+}
+
+export const appendClearStateCookie = (response: Response, clearCookie: string): Response => {
+  const headers = new Headers(response.headers)
+  headers.append('Set-Cookie', clearCookie)
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  })
 }
 
 export const isSecureRequest = (url: string | undefined): boolean => {

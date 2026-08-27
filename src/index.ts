@@ -1,18 +1,15 @@
-import type { Config, Endpoint } from 'payload'
+import type { Config } from 'payload'
 
 import { deepMergeSimple } from 'payload/shared'
 
-import type {
-  CollectionSocialLoginConfig,
-  PayloadSimpleSocialLoginConfig,
-  SocialProviderId,
-} from './types.js'
+import type { CollectionSocialLoginConfig, PayloadSimpleSocialLoginConfig } from './types.js'
 
-import { createCallbackEndpoint } from './endpoints/createCallbackEndpoint.js'
-import { createLoginEndpoint } from './endpoints/createLoginEndpoint.js'
+import { createSocialAuthEndpoints } from './endpoints/createSocialAuthEndpoints.js'
 import { createEnabledProviders } from './providers/createProvider.js'
 import { translations } from './translations/index.js'
 import { resolveProviderUrls } from './utils/resolveProviderUrls.js'
+
+export { createSocialAuthEndpoints } from './endpoints/createSocialAuthEndpoints.js'
 
 const resolveCollections = ({
   config,
@@ -55,32 +52,26 @@ export const payloadSimpleSocialLogin =
 
     const enabledProviders = createEnabledProviders(pluginOptions.providers)
     const collections = resolveCollections({ config, pluginOptions })
-    const providerEndpoints: Endpoint[] = []
+    const providerEndpoints = [...(config.endpoints ?? [])]
     const buttonProviders: Array<{
       href: string
-      id: SocialProviderId
+      id: (typeof enabledProviders)[number]['id']
       label?: string
     }> = []
 
     const apiRoute = (config.routes?.api ?? '/api').replace(/\/$/, '') || '/api'
 
     for (const provider of enabledProviders) {
-      const { callbackURL, loginUrl } = resolveProviderUrls({
+      const { loginUrl } = resolveProviderUrls({
         provider: provider.config,
         providerId: provider.id,
       })
 
       providerEndpoints.push(
-        createLoginEndpoint({
-          callbackURL,
-          path: loginUrl,
-          provider,
-        }),
-        createCallbackEndpoint({
-          callbackURL,
+        ...createSocialAuthEndpoints({
+          ...provider.config,
           collections,
-          path: callbackURL,
-          provider,
+          provider: provider.id,
         }),
       )
 
@@ -91,7 +82,7 @@ export const payloadSimpleSocialLogin =
       })
     }
 
-    config.endpoints = [...(config.endpoints ?? []), ...providerEndpoints]
+    config.endpoints = providerEndpoints
 
     if (enabledProviders.length > 0) {
       const afterLogin = [...(config.admin?.components?.afterLogin ?? [])]

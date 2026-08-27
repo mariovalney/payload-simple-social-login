@@ -1,4 +1,4 @@
-import type { CollectionSlug, Payload } from 'payload'
+import type { CollectionSlug, Payload, PayloadRequest } from 'payload'
 
 /**
  * Shared OAuth options for every provider.
@@ -224,6 +224,51 @@ export type CollectionSocialLoginConfig = {
    */
   findUserCallback?: FindUserCallback
 }
+
+export type SocialAuthErrorCode = 'login' | 'not-found' | 'unverified'
+
+export type SocialAuthOnSuccessArgs = {
+  accessToken: string
+  profile: Record<string, unknown>
+  profileEmail: null | string
+  profileId: null | string
+  provider: SocialProviderId
+  req: PayloadRequest
+}
+
+export type SocialAuthOnSuccess = (args: SocialAuthOnSuccessArgs) => Promise<Response> | Response
+
+export type SocialAuthOnErrorArgs = {
+  code: SocialAuthErrorCode
+  error?: unknown
+  req: PayloadRequest
+}
+
+export type SocialAuthOnError = (args: SocialAuthOnErrorArgs) => Promise<Response> | Response
+
+type SocialAuthEndpointsProviderConfig<T extends SocialProviderId> = T extends 'google'
+  ? GoogleProviderConfig
+  : MicrosoftProviderConfig
+
+type SocialAuthEndpointsAdminFlow<T extends SocialProviderId> =
+  {
+    collections: CollectionSocialLoginConfig[]
+    onError?: undefined
+    onSuccess?: undefined
+    provider: T
+  } & SocialAuthEndpointsProviderConfig<T>
+
+type SocialAuthEndpointsCustomFlow<T extends SocialProviderId> =
+  {
+    collections?: undefined
+    onError?: SocialAuthOnError
+    onSuccess: SocialAuthOnSuccess
+    provider: T
+  } & SocialAuthEndpointsProviderConfig<T>
+
+export type CreateSocialAuthEndpointsArgs<T extends SocialProviderId = SocialProviderId> =
+  | SocialAuthEndpointsAdminFlow<T>
+  | SocialAuthEndpointsCustomFlow<T>
 
 export type PayloadSimpleSocialLoginConfig = {
   /**

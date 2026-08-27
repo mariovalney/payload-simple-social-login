@@ -13,10 +13,12 @@ export const createLoginEndpoint = ({
   callbackURL,
   path,
   provider,
+  stateCookieName,
 }: {
   callbackURL: string
   path: string
   provider: BaseProvider
+  stateCookieName: string
 }): Endpoint => ({
   handler: (req) => {
     const redirectUri = resolveAbsoluteCallbackUrl({ callbackURL, req })
@@ -28,9 +30,9 @@ export const createLoginEndpoint = ({
       headers: {
         Location: authorizeUrl,
         'Set-Cookie': buildOAuthStateCookie({
-          providerId: provider.id,
           secure,
           state,
+          stateCookieName,
         }),
       },
       status: 302,
