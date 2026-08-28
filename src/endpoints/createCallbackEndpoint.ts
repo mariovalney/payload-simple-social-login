@@ -42,7 +42,7 @@ const redirectToLoginWithError = (
 }
 
 const defaultCustomErrorResponse = (code: SslErrorCode): Response => {
-  const status = code === 'not-found' ? 404 : 400
+  const status = code === 'not_found' ? 404 : 400
   return Response.json({ error: code }, { status })
 }
 
@@ -139,7 +139,7 @@ const completeAdminLogin = async ({
   })
 
   if (!matched) {
-    return redirectToLoginWithError(req, 'not-found')
+    return redirectToLoginWithError(req, 'not_found')
   }
 
   const userWithEmail =

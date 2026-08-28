@@ -282,7 +282,7 @@ describe('Plugin integration tests', () => {
     }
   })
 
-  test('callback redirects with not-found when no Payload user matches profile email', async () => {
+  test('callback redirects with not_found when no Payload user matches profile email', async () => {
     const state = 'valid-oauth-state-value'
     const profile = { email: 'unknown@example.com', sub: 'google-user-unknown' }
 
@@ -318,7 +318,7 @@ describe('Plugin integration tests', () => {
       expect(endpoint).toBeDefined()
       const response = await endpoint!.handler(payloadRequest)
       expect(response.status).toBe(302)
-      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=not-found')
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=not_found')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -886,7 +886,7 @@ describe('Plugin integration tests', () => {
       const denyRequest = await createPayloadRequest({ config, request: request.clone() })
       const denyResponse = await denyEndpoint!.handler(denyRequest)
       expect(denyResponse.status).toBe(302)
-      expect(denyResponse.headers.get('location')).toBe('/admin/login?ssl-error=not-found')
+      expect(denyResponse.headers.get('location')).toBe('/admin/login?ssl-error=not_found')
     } finally {
       globalThis.fetch = originalFetch
     }
