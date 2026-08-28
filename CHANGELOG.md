@@ -4,11 +4,15 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.1] - 2026-08-28
 
 ### Changed
 
-- **Breaking:** the `not-found` error code is now `not_found` (`ssl-error=not_found` redirect, `SocialAuthErrorCode` union, and the `{ error }` body of the default `onError` response). Update any handler or link that matches the old hyphenated value
+- Error code `not-found` renamed to `not_found`: the callback now redirects to `ssl-error=not_found`, and the same value is used by the `SocialAuthErrorCode` union and the `{ error }` body of the default `onError` response
+
+### Notes
+
+- Not backward compatible for consumers that match the old hyphenated value: update any `onError` handler, link, or toast override that reads `not-found`
 
 ## [1.1.0] - 2026-08-27
 
@@ -68,6 +72,7 @@ First stable release.
 - The plugin does not auto-create users or link/unlink OAuth accounts; apps own that via `findUserCallback` when needed
 - Provider access tokens are not stored; only the Payload session cookie is issued
 
+[1.1.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.1
 [1.1.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.0
 [1.0.2]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.2
 [1.0.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.1
