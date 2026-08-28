@@ -83,7 +83,7 @@ export default buildConfig({
 
 ### Finding users
 
-After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each collection’s `findUserCallback` (or the default email match). The first returned user is logged in (JWT cookie) and the browser is redirected to the admin panel. If none match → `/admin/login?ssl-error=not-found`.
+After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each collection’s `findUserCallback` (or the default email match). The first returned user is logged in (JWT cookie) and the browser is redirected to the admin panel. If none match → `/admin/login?ssl-error=not_found`.
 
 | Arg | Google | Microsoft |
 | --- | --- | --- |
@@ -154,7 +154,7 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 | Code | When | Toast |
 | --- | --- | --- |
 | `login` | Invalid/missing state, missing code, IdP error, token/profile failure, missing `profileEmail` | Generic “try again” |
-| `not-found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
+| `not_found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
 | `unverified` | Default findUser: collection has `auth.verify`, matched user has `_verified: false`, and `autoVerify` is not enabled | Please verify your email before logging in |
 
 ### Custom endpoints

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** the `not-found` error code is now `not_found` (`ssl-error=not_found` redirect, `SocialAuthErrorCode` union, and the `{ error }` body of the default `onError` response). Update any handler or link that matches the old hyphenated value
+
 ## [1.1.0] - 2026-08-27
 
 ### Added

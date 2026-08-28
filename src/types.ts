@@ -197,7 +197,7 @@ export type FindUserCallbackArgs = {
  * Resolve an existing user from the provider profile, or `null` if none.
  *
  * May create and return a user (find-or-create). The plugin never auto-creates
- * by itself. Returning `null` denies login (`ssl-error=not-found`).
+ * by itself. Returning `null` denies login (`ssl-error=not_found`).
  *
  * When omitted, the default email match also rejects unverified users on
  * collections with `auth.verify` (`ssl-error=unverified`), unless
@@ -225,7 +225,7 @@ export type CollectionSocialLoginConfig = {
   findUserCallback?: FindUserCallback
 }
 
-export type SocialAuthErrorCode = 'login' | 'not-found' | 'unverified'
+export type SocialAuthErrorCode = 'login' | 'not_found' | 'unverified'
 
 export type SocialAuthOnSuccessArgs = {
   accessToken: string

@@ -8,9 +8,9 @@ import type { PluginTranslationKeys, PluginTranslationsObject } from '../transla
 const SSL_ERROR_QUERY = 'ssl-error'
 
 const ERROR_I18N_KEYS = {
-  'login': 'plugin-simple-social-login:loginFailed',
-  'not-found': 'plugin-simple-social-login:userNotFound',
-  'unverified': 'plugin-simple-social-login:emailNotVerified',
+  login: 'plugin-simple-social-login:loginFailed',
+  not_found: 'plugin-simple-social-login:userNotFound',
+  unverified: 'plugin-simple-social-login:emailNotVerified',
 } as const satisfies Record<string, PluginTranslationKeys>
 
 export const SocialLoginErrorToast = () => {
