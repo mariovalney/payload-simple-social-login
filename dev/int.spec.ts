@@ -1,4 +1,4 @@
-import type { Config, Payload } from 'payload'
+import type { Config, Payload, PayloadRequest } from 'payload'
 
 import config from '@payload-config'
 import { createPayloadRequest, getPayload } from 'payload'
@@ -8,6 +8,7 @@ import { createSocialAuthEndpoints, payloadSimpleSocialLogin } from '../src/inde
 import { GoogleProvider } from '../src/providers/google.js'
 import { MicrosoftProvider } from '../src/providers/microsoft.js'
 import { getOAuthStateCookieName } from '../src/utils/oauthState.js'
+import { resolveAbsoluteCallbackUrl } from '../src/utils/resolveAbsoluteCallbackUrl.js'
 
 const dummyGoogle = {
   clientId: 'test-google-client-id',
@@ -1152,5 +1153,252 @@ describe('Plugin integration tests', () => {
 
     expect(cookies.some((cookie) => cookie?.includes(`${appStateCookie}=`))).toBe(true)
     expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
+  })
+})
+
+describe('resolveAbsoluteCallbackUrl', () => {
+  const googleCallback = '/auth/google/callback'
+
+  type FakeRequestArgs = {
+    cors?: string | string[]
+    csrf?: string[]
+    headers?: Record<string, string>
+    serverURL?: string
+    url?: string
+  }
+
+  const createFakeRequest = ({
+    cors = [],
+    csrf = [],
+    headers = {},
+    serverURL = '',
+    url = 'http://localhost:3000/api/auth/google/callback',
+  }: FakeRequestArgs = {}): { req: PayloadRequest; warnings: string[] } => {
+    const warnings: string[] = []
+
+    const req = {
+      headers: new Headers(headers),
+      payload: {
+        config: {
+          cors,
+          csrf,
+          routes: { api: '/api' },
+          serverURL,
+        },
+        logger: {
+          warn: (message: string) => warnings.push(message),
+        },
+      },
+      url,
+    } as unknown as PayloadRequest
+
+    return { req, warnings }
+  }
+
+  test('serverURL option as string wins over the Payload config', () => {
+    const { req } = createFakeRequest({ serverURL: 'https://config.example.com' })
+
+    expect(
+      resolveAbsoluteCallbackUrl({
+        callbackURL: googleCallback,
+        req,
+        serverURL: 'https://option.example.com/',
+      }),
+    ).toBe('https://option.example.com/api/auth/google/callback')
+  })
+
+  test('serverURL option as function resolves per request', () => {
+    const serverURL = (req: PayloadRequest) => {
+      const host = req.headers.get('host')
+      return host ? `https://${host}` : null
+    }
+
+    const admin = createFakeRequest({ headers: { host: 'admin.example.com' } })
+    const sso = createFakeRequest({ headers: { host: 'sso.example.com' } })
+    const none = createFakeRequest({ serverURL: 'https://config.example.com' })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req: admin.req, serverURL })).toBe(
+      'https://admin.example.com/api/auth/google/callback',
+    )
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req: sso.req, serverURL })).toBe(
+      'https://sso.example.com/api/auth/google/callback',
+    )
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req: none.req, serverURL })).toBe(
+      'https://config.example.com/api/auth/google/callback',
+    )
+  })
+
+  test('falls back to serverURL from the Payload config', () => {
+    const { req, warnings } = createFakeRequest({ serverURL: 'https://config.example.com/' })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req })).toBe(
+      'https://config.example.com/api/auth/google/callback',
+    )
+    expect(warnings).toHaveLength(0)
+  })
+
+  test('uses the Host header when the origin is in the CORS/CSRF allowlist', () => {
+    const fromCors = createFakeRequest({
+      cors: ['https://app.example.com'],
+      headers: { host: 'app.example.com', 'x-forwarded-proto': 'https' },
+    })
+    const fromCsrf = createFakeRequest({
+      csrf: ['https://app.example.com'],
+      headers: { host: 'app.example.com', 'x-forwarded-proto': 'https' },
+    })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req: fromCors.req })).toBe(
+      'https://app.example.com/api/auth/google/callback',
+    )
+    expect(fromCors.warnings).toHaveLength(0)
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req: fromCsrf.req })).toBe(
+      'https://app.example.com/api/auth/google/callback',
+    )
+    expect(fromCsrf.warnings).toHaveLength(0)
+  })
+
+  test('warns and ignores the Host header when the origin is not in the allowlist', () => {
+    const { req, warnings } = createFakeRequest({
+      cors: ['https://other.example.com'],
+      headers: { host: 'attacker.example.com', 'x-forwarded-proto': 'https' },
+      url: 'http://localhost:3000/api/auth/google/callback',
+    })
+
+    const result = resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req })
+
+    expect(result).not.toContain('attacker.example.com')
+    expect(result).toBe('http://localhost:3000/api/auth/google/callback')
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('https://attacker.example.com')
+    expect(warnings[0]).toContain('serverURL')
+  })
+
+  test('wildcard cors is not an allowlist and never trusts the Host header', () => {
+    const { req, warnings } = createFakeRequest({
+      cors: '*',
+      headers: { host: 'attacker.example.com', 'x-forwarded-proto': 'https' },
+    })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: googleCallback, req })).toBe(
+      'http://localhost:3000/api/auth/google/callback',
+    )
+    expect(warnings).toHaveLength(1)
+  })
+
+  test('behind a proxy the internal req.url host is never used as the origin', () => {
+    const microsoftCallback = '/auth/microsoft/callback'
+    const proxyHeaders = { host: 'sso.example.com', 'x-forwarded-proto': 'https' }
+    const internalUrl = 'https://localhost:80/api/auth/microsoft/callback'
+
+    const allowlisted = createFakeRequest({
+      cors: ['https://sso.example.com'],
+      headers: proxyHeaders,
+      url: internalUrl,
+    })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: microsoftCallback, req: allowlisted.req })).toBe(
+      'https://sso.example.com/api/auth/microsoft/callback',
+    )
+    expect(allowlisted.warnings).toHaveLength(0)
+
+    const withOption = createFakeRequest({ headers: proxyHeaders, url: internalUrl })
+
+    expect(
+      resolveAbsoluteCallbackUrl({
+        callbackURL: microsoftCallback,
+        req: withOption.req,
+        serverURL: 'https://sso.example.com',
+      }),
+    ).toBe('https://sso.example.com/api/auth/microsoft/callback')
+    expect(withOption.warnings).toHaveLength(0)
+
+    const unconfigured = createFakeRequest({ headers: proxyHeaders, url: internalUrl })
+
+    expect(resolveAbsoluteCallbackUrl({ callbackURL: microsoftCallback, req: unconfigured.req })).toBe(
+      'https://localhost:80/api/auth/microsoft/callback',
+    )
+    expect(unconfigured.warnings).toHaveLength(1)
+  })
+
+  test('login and callback endpoints resolve the same redirect_uri', async () => {
+    const state = 'valid-oauth-state-value'
+    const callbackURL = '/proxy/google/callback'
+    const stateCookie = getOAuthStateCookieName({ callbackURL, providerId: 'google' })
+
+    const endpoints = createSocialAuthEndpoints({
+      ...dummyGoogle,
+      callbackURL,
+      loginUrl: '/proxy/google/login',
+      onSuccess: () => Response.json({ ok: true }),
+      provider: 'google',
+      serverURL: (req) => {
+        const host = req.headers.get('host')
+        return host ? `https://${host}` : null
+      },
+    })
+
+    const loginEndpoint = endpoints.find((item) => item.path === '/proxy/google/login')
+    const callbackEndpoint = endpoints.find((item) => item.path === callbackURL)
+
+    expect(loginEndpoint).toBeDefined()
+    expect(callbackEndpoint).toBeDefined()
+
+    const proxyHeaders = { host: 'sso.example.com', 'x-forwarded-proto': 'https' }
+
+    const loginRequest = await createPayloadRequest({
+      config,
+      request: new Request('https://localhost:80/api/proxy/google/login', {
+        headers: proxyHeaders,
+        method: 'GET',
+      }),
+    })
+
+    const loginResponse = await loginEndpoint!.handler(loginRequest)
+    const loginRedirectUri = new URL(loginResponse.headers.get('location')!).searchParams.get(
+      'redirect_uri',
+    )
+
+    expect(loginRedirectUri).toBe('https://sso.example.com/api/proxy/google/callback')
+    expect(loginResponse.headers.get('set-cookie')).toMatch(/Secure/i)
+
+    let callbackRedirectUri: null | string = null
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        const body = init?.body as undefined | URLSearchParams
+        callbackRedirectUri = new URLSearchParams(body?.toString()).get('redirect_uri')
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json({ email: 'ada@example.com', sub: 'google-sub' }))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    try {
+      const callbackRequest = await createPayloadRequest({
+        config,
+        request: new Request(
+          `https://localhost:80/api/proxy/google/callback?state=${state}&code=auth-code`,
+          {
+            headers: {
+              ...proxyHeaders,
+              Cookie: `${stateCookie}=${state}`,
+            },
+            method: 'GET',
+          },
+        ),
+      })
+
+      const callbackResponse = await callbackEndpoint!.handler(callbackRequest)
+      expect(callbackResponse.status).toBe(200)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+
+    expect(callbackRedirectUri).toBe(loginRedirectUri)
   })
 })

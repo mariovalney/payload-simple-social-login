@@ -59,6 +59,7 @@ export default buildConfig({
         },
       },
       // collections: [{ collection: 'users' }],
+      // serverURL: 'https://app.example.com',
       showButtonOnLogin: true,
       // disabled: false,
     }),
@@ -75,11 +76,56 @@ export default buildConfig({
 | `providers.*.loginUrl` | Login start path (button `href` + endpoint). Default `/auth/{providerId}/login`. |
 | `providers.*.label` | Button label; falls back to plugin i18n. |
 | `providers.microsoft.tenant` | Entra tenant segment. Default `common`. |
+| `providers.*.serverURL` | Optional. Origin used to build this provider `redirect_uri` (`https://app.example.com`). String or `(req) => string \| null`. Takes precedence over the plugin `serverURL` and over `serverURL` from the Payload config. |
 | `collections` | Auth collections to resolve users for. When omitted: `[{ collection: admin.user }]` with email match. |
 | `collections[].autoVerify` | Optional. Default find only: if the collection has `auth.verify` and the user is unverified, set `_verified: true` (only that field) and continue. Default `false`. Ignored when `findUserCallback` is set. |
 | `collections[].findUserCallback` | Optional. Locate (or create, in your app) a user. When omitted: match by `profileEmail` and respect `auth.verify` / `autoVerify`. |
+| `serverURL` | Optional. Same as `providers.*.serverURL`, applied to every provider. Used when the provider does not define its own. See [Deploying behind a proxy](#deploying-behind-a-proxy). |
 | `showButtonOnLogin` | Show buttons on the admin login form. Default `true`. |
 | `disabled` | Skip registering endpoints and UI. Default `false`. |
+
+### Deploying behind a proxy
+
+The OAuth `redirect_uri` must be the **public** URL of the app, and both the login and the callback endpoints must send the exact same value, otherwise the IdP answers `redirect_uri_mismatch`.
+
+The plugin resolves the origin in this order:
+
+1. `serverURL` from the plugin options (`providers.*.serverURL` first, then the top level `serverURL`)
+2. `serverURL` from the Payload config
+3. The request origin, built from the `Host` header, and only when that origin is listed in `cors` / `csrf`
+4. `req.url`, with a warning recommending `serverURL`
+
+Step 4 is the fallback that breaks behind a proxy. `req.url` is **not** the public URL: Next builds it as `${protocol}://${fetchHostname}:${port}${req.url}`, where the hostname falls back to `localhost` and the port is the internal container port, so the callback becomes something like `https://localhost:80/api/auth/microsoft/callback`. The real public host travels in the `Host` header. Payload also defaults `serverURL` to an empty string, so this fallback is the common path, not an edge case.
+
+Steps 3 and 4 mirror what Payload core does in `getRequestOrigin` (used for verification and reset password links): the `Host` header is only trusted when it is in the CORS / CSRF allowlist, since it is client controlled. A `cors: '*'` is not an allowlist and is never trusted.
+
+Pick one of these in production:
+
+```ts
+export default buildConfig({
+  // Recommended: single public origin for the whole app
+  serverURL: process.env.PAYLOAD_PUBLIC_SERVER_URL, // https://app.example.com
+  // or, keeping serverURL empty, allowlist the public origin
+  cors: ['https://app.example.com'],
+  csrf: ['https://app.example.com'],
+})
+```
+
+When one process serves more than one public host (admin on one domain, SSO on another), use the function form. It runs per request, so nothing needs to mutate the shared `req.payload.config.serverURL`:
+
+```ts
+payloadSimpleSocialLogin({
+  providers: { microsoft: { clientId, clientSecret } },
+  serverURL: (req) => {
+    const host = req.headers.get('host')
+    return host ? `https://${host}` : null
+  },
+})
+```
+
+Return `null` or `undefined` to fall back to the next source in the chain. Register every resulting redirect URI in the IdP console.
+
+The `Secure` flag of the OAuth `state` cookie follows the same logic: `x-forwarded-proto` first, then the resolved origin.
 
 ### Finding users
 
@@ -159,7 +205,7 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 
 ### Custom endpoints
 
-Use `createSocialAuthEndpoints` when you need extra OAuth flows (frontend app, account linking, JSON callback) without duplicating provider logic. It accepts the **same** provider config as the plugin (`clientId`, `clientSecret`, optional `loginUrl` / `callbackURL`, `tenant` for Microsoft).
+Use `createSocialAuthEndpoints` when you need extra OAuth flows (frontend app, account linking, JSON callback) without duplicating provider logic. It accepts the **same** provider config as the plugin (`clientId`, `clientSecret`, optional `loginUrl` / `callbackURL`, `serverURL`, `tenant` for Microsoft).
 
 Register the returned pair on `config.endpoints`. You do **not** need the plugin in `plugins[]` for custom-only flows; use both when you want admin login plus extra URLs.
 
@@ -212,7 +258,7 @@ export default buildConfig({
 })
 ```
 
-Types: `CreateSocialAuthEndpointsArgs`, `SocialAuthOnSuccess`, `SocialAuthOnSuccessArgs`, `SocialAuthOnError`, `SocialAuthOnErrorArgs`, `SocialAuthErrorCode` from `payload-simple-social-login/types`.
+Types: `CreateSocialAuthEndpointsArgs`, `SocialLoginServerURL`, `SocialAuthOnSuccess`, `SocialAuthOnSuccessArgs`, `SocialAuthOnError`, `SocialAuthOnErrorArgs`, `SocialAuthErrorCode` from `payload-simple-social-login/types`.
 
 ### Out of scope
 

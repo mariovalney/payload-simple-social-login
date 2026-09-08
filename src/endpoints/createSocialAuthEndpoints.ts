@@ -21,6 +21,7 @@ const toProviderConfig = (
     onError: _onError,
     onSuccess: _onSuccess,
     provider: _provider,
+    serverURL: _serverURL,
     ...config
   } = args
 
@@ -30,7 +31,7 @@ const toProviderConfig = (
 export const createSocialAuthEndpoints = <T extends SocialProviderId>(
   args: CreateSocialAuthEndpointsArgs<T>,
 ): Endpoint[] => {
-  const { collections, onError, onSuccess, provider: providerId } = args
+  const { collections, onError, onSuccess, provider: providerId, serverURL } = args
   const providerConfig = toProviderConfig(args)
   const provider = createProvider(providerId, providerConfig as never)
 
@@ -49,6 +50,7 @@ export const createSocialAuthEndpoints = <T extends SocialProviderId>(
       callbackURL,
       path: loginUrl,
       provider,
+      serverURL,
       stateCookieName,
     }),
     createCallbackEndpoint({
@@ -58,6 +60,7 @@ export const createSocialAuthEndpoints = <T extends SocialProviderId>(
       onSuccess,
       path: callbackURL,
       provider,
+      serverURL,
       stateCookieName,
     }),
   ]

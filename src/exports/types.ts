@@ -16,6 +16,7 @@ export type {
   SocialAuthOnErrorArgs,
   SocialAuthOnSuccess,
   SocialAuthOnSuccessArgs,
+  SocialLoginServerURL,
   SocialLoginUser,
   SocialProviderId,
   SocialProviderProfile,

@@ -6,6 +6,7 @@ import type {
   SocialAuthErrorCode,
   SocialAuthOnError,
   SocialAuthOnSuccess,
+  SocialLoginServerURL,
   SocialLoginUser,
 } from '../types.js'
 
@@ -199,6 +200,7 @@ export const createCallbackEndpoint = ({
   onSuccess,
   path,
   provider,
+  serverURL,
   stateCookieName,
 }: {
   callbackURL: string
@@ -207,11 +209,26 @@ export const createCallbackEndpoint = ({
   onSuccess?: SocialAuthOnSuccess
   path: string
   provider: BaseProvider
+  serverURL?: SocialLoginServerURL
   stateCookieName: string
 }): Endpoint => ({
   handler: async (req) => {
     const requestUrl = req.url ?? 'http://localhost'
-    const secure = isSecureRequest(requestUrl)
+
+    /**
+     * Resolved here (not only where the token exchange needs it) so the `Secure` flag of the
+     * state cookie follows the same origin the login endpoint used.
+     */
+    let redirectUri: null | string = null
+    let redirectUriError: Error | null = null
+    try {
+      redirectUri = resolveAbsoluteCallbackUrl({ callbackURL, req, serverURL })
+    } catch (error) {
+      redirectUriError =
+        error instanceof Error ? error : new Error('Unable to resolve the OAuth callback URL')
+    }
+
+    const secure = isSecureRequest({ req, resolvedURL: redirectUri ?? requestUrl })
     const clearCookie = clearOAuthStateCookie({ secure, stateCookieName })
 
     const url = new URL(requestUrl)
@@ -244,10 +261,10 @@ export const createCallbackEndpoint = ({
     }
 
     try {
-      const redirectUri = resolveAbsoluteCallbackUrl({
-        callbackURL,
-        req,
-      })
+      if (!redirectUri) {
+        throw redirectUriError ?? new Error('Unable to resolve the OAuth callback URL')
+      }
+
       const { accessToken } = await provider.exchangeCode({ code, redirectUri })
       const profile = await provider.fetchProfile({ accessToken })
       const { profileEmail, profileId } = normalizeProviderProfile({
