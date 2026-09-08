@@ -1,6 +1,19 @@
 import type { CollectionSlug, Payload, PayloadRequest } from 'payload'
 
 /**
+ * Origin used to build the OAuth `redirect_uri`, without the API route or callback path
+ * (e.g. `https://app.example.com`).
+ *
+ * The function variant runs on every request, so a single Payload process can serve more
+ * than one public host (admin and SSO on different domains) without mutating the shared
+ * `req.payload.config.serverURL` singleton. Return `null` / `undefined` to fall back to the
+ * next source in the chain.
+ */
+export type SocialLoginServerURL =
+  | ((req: PayloadRequest) => null | string | undefined)
+  | string
+
+/**
  * Shared OAuth options for every provider.
  */
 export type ProviderConfig = {
@@ -23,6 +36,12 @@ export type ProviderConfig = {
    * @default `/auth/{providerId}/login`
    */
   loginUrl?: string
+  /**
+   * Origin used to build this provider `redirect_uri`. Takes precedence over the plugin
+   * `serverURL` option and over `serverURL` from the Payload config.
+   * See {@link SocialLoginServerURL}.
+   */
+  serverURL?: SocialLoginServerURL
 }
 
 /** Google-specific options beyond {@link ProviderConfig}. */
@@ -289,6 +308,15 @@ export type PayloadSimpleSocialLoginConfig = {
     google?: GoogleProviderConfig
     microsoft?: MicrosoftProviderConfig
   }
+  /**
+   * Origin used to build every `redirect_uri` registered by the plugin.
+   * Used when the provider does not define its own `serverURL`, and takes precedence over
+   * `serverURL` from the Payload config. See {@link SocialLoginServerURL}.
+   *
+   * Required (here or on the Payload config) when the app runs behind a proxy and the
+   * request origin is not in the CORS / CSRF allowlist.
+   */
+  serverURL?: SocialLoginServerURL
   /**
    * Show social login buttons on the admin login form (`afterLogin`).
    * @default true

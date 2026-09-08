@@ -72,6 +72,7 @@ export const payloadSimpleSocialLogin =
           ...provider.config,
           collections,
           provider: provider.id,
+          serverURL: provider.config.serverURL ?? pluginOptions.serverURL,
         }),
       )
 

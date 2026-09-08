@@ -1,6 +1,7 @@
 import type { Endpoint } from 'payload'
 
 import type { BaseProvider } from '../providers/base.js'
+import type { SocialLoginServerURL } from '../types.js'
 
 import {
   buildOAuthStateCookie,
@@ -13,18 +14,20 @@ export const createLoginEndpoint = ({
   callbackURL,
   path,
   provider,
+  serverURL,
   stateCookieName,
 }: {
   callbackURL: string
   path: string
   provider: BaseProvider
+  serverURL?: SocialLoginServerURL
   stateCookieName: string
 }): Endpoint => ({
   handler: (req) => {
-    const redirectUri = resolveAbsoluteCallbackUrl({ callbackURL, req })
+    const redirectUri = resolveAbsoluteCallbackUrl({ callbackURL, req, serverURL })
     const state = createOAuthState()
     const authorizeUrl = provider.redirectToLogin({ redirectUri, state })
-    const secure = isSecureRequest(req.url)
+    const secure = isSecureRequest({ req, resolvedURL: redirectUri })
 
     return new Response(null, {
       headers: {

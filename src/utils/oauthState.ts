@@ -1,7 +1,11 @@
+import type { PayloadRequest } from 'payload'
+
 import { randomBytes, timingSafeEqual } from 'crypto'
 import { generateCookie, parseCookies } from 'payload/shared'
 
 import type { SocialProviderId } from '../types.js'
+
+import { getForwardedProtocol } from './resolveRequestOrigin.js'
 
 export const OAUTH_STATE_MAX_AGE_SECONDS = 600
 
@@ -108,7 +112,7 @@ export const appendClearStateCookie = (response: Response, clearCookie: string):
   })
 }
 
-export const isSecureRequest = (url: string | undefined): boolean => {
+const isHttpsURL = (url: string | undefined): boolean => {
   if (!url) {
     return false
   }
@@ -118,4 +122,25 @@ export const isSecureRequest = (url: string | undefined): boolean => {
   } catch {
     return false
   }
+}
+
+/**
+ * Whether the state cookie must be flagged `Secure`.
+ *
+ * Behind a proxy the protocol of `req.url` is not reliable, so `x-forwarded-proto` wins and the
+ * resolved callback URL (the public origin the plugin actually redirects to) comes next.
+ */
+export const isSecureRequest = ({
+  req,
+  resolvedURL,
+}: {
+  req: Pick<PayloadRequest, 'headers' | 'url'>
+  resolvedURL?: string
+}): boolean => {
+  const forwardedProtocol = getForwardedProtocol(req)
+  if (forwardedProtocol) {
+    return forwardedProtocol === 'https:'
+  }
+
+  return isHttpsURL(resolvedURL ?? req.url)
 }

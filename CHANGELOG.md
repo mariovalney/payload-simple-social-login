@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-09-08
+
+### Fixed
+
+- OAuth `redirect_uri` behind a proxy: when the Payload config has no `serverURL`, the request origin now comes from the `Host` header (protocol from `x-forwarded-proto`) instead of the host of `req.url`, which behind a proxy is the internal one (`https://localhost:80/...`) and broke the login with `redirect_uri_mismatch`
+- `Secure` flag of the OAuth `state` cookie now follows `x-forwarded-proto` and the resolved origin, not the protocol of `req.url`
+
+### Added
+
+- `serverURL` option, as a string or a per request function `(req) => string | null`, available on the plugin options, on each provider (`providers.*.serverURL`) and on the args of `createSocialAuthEndpoints`. Precedence: provider, plugin, Payload config. The function form serves more than one public host from a single process without mutating `req.payload.config.serverURL`
+- `SocialLoginServerURL` type exported from `payload-simple-social-login/types`
+
+### Notes
+
+- Backward compatible: with no new option and no `serverURL` in the config, the origin derived from the `Host` header is used only when it is in the `cors` / `csrf` allowlist (same rule Payload core applies in `getRequestOrigin`), otherwise the plugin logs a warning recommending `serverURL` and keeps the previous `req.url` fallback
+- Login and callback endpoints resolve the same URL, so a `serverURL` function is called on both requests of the flow and must be deterministic for them
+
 ## [1.1.1] - 2026-08-28
 
 ### Changed
@@ -72,6 +89,7 @@ First stable release.
 - The plugin does not auto-create users or link/unlink OAuth accounts; apps own that via `findUserCallback` when needed
 - Provider access tokens are not stored; only the Payload session cookie is issued
 
+[1.1.2]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.2
 [1.1.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.1
 [1.1.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.0
 [1.0.2]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.0.2
