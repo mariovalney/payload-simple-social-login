@@ -4,6 +4,36 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-10-11
+
+### Security
+
+- Social login could match a Payload account by an email address the identity provider does not vouch for. On Microsoft the plugin preferred the `mail` attribute, which tenant admins can set to any address without proving domain ownership; on Google it ignored `email_verified`. With the default `common` tenant this allowed signing in as another user. Accounts are now matched only by provider-verified addresses
+- Microsoft: `profileEmail` comes from `userPrincipalName` only. `mail` is never used, not even as a fallback. Missing, non-email and guest (`#EXT#`) UPNs produce no `profileEmail`
+- Google: `profileEmail` is set only when `email_verified` is `true` (boolean, as documented for the UserInfo endpoint)
+- Both providers trim and lowercase the address, and the default lookup compares the normalized value
+- Without a verified address, every flow stops before `onSuccess`, `findUserCallback` or any database lookup
+
+### Breaking changes
+
+Released as a patch so every `^1` install receives the fix, but it changes behavior:
+
+- Microsoft users whose `mail` differs from their `userPrincipalName` now sign in by the UPN. Update the Payload account email to the UPN, or match by `profileId` in `findUserCallback`
+- Microsoft guest accounts (`#EXT#` UPN) and accounts whose UPN is not an email can no longer sign in through email matching
+- Google accounts whose email is not verified can no longer sign in
+- Custom flows: `onSuccess` is no longer called without a verified email; `onError` receives `code: 'email_unverified'` instead (default response `400 { "error": "email_unverified" }`)
+- Types: `profileEmail` is `string` (was `null | string`) in `SocialAuthOnSuccessArgs` and `FindUserCallbackArgs`; `SocialAuthErrorCode` gains `'email_unverified'`, so exhaustive `switch` statements over it need a new case
+- A callback without a usable email now redirects to `ssl-error=email_unverified` instead of `ssl-error=login`
+
+### Added
+
+- Error code `email_unverified`, with an admin toast and en/pt translations (`providerEmailNotVerified`)
+
+### Notes
+
+- `tenant` still defaults to `common`. With UPN-only matching, accepting any tenant no longer allows account takeover; pin `tenant` when only one directory should sign in (e.g. the admin panel)
+- Code in `findUserCallback` or `onSuccess` that reads `profile.email` or `profile.mail` bypasses these checks. Use `profileEmail` / `profileId`
+
 ## [1.1.2] - 2026-09-08
 
 ### Fixed
@@ -89,6 +119,7 @@ First stable release.
 - The plugin does not auto-create users or link/unlink OAuth accounts; apps own that via `findUserCallback` when needed
 - Provider access tokens are not stored; only the Payload session cookie is issued
 
+[1.1.3]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.3
 [1.1.2]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.2
 [1.1.1]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.1
 [1.1.0]: https://github.com/mariovalney/payload-simple-social-login/releases/tag/v1.1.0
