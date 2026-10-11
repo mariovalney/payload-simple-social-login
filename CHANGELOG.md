@@ -33,6 +33,7 @@ Released as a patch so every `^1` install receives the fix, but it changes behav
 
 - `tenant` still defaults to `common`. With UPN-only matching, accepting any tenant no longer allows account takeover; pin `tenant` when only one directory should sign in (e.g. the admin panel)
 - Code in `findUserCallback` or `onSuccess` that reads `profile.email` or `profile.mail` bypasses these checks. Use `profileEmail` / `profileId`
+- There is no option to accept unverified emails. Directories that registered users by `mail` can add it as an extra lookup key in `findUserCallback` only with `tenant` pinned to a trusted directory; the README has an example and the risks
 
 ## [1.1.2] - 2026-09-08
 

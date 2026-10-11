@@ -129,6 +129,8 @@ The `Secure` flag of the OAuth `state` cookie follows the same logic: `x-forward
 
 ### How accounts are matched
 
+**The plugin only accepts emails verified by the provider.** There is no option to sign in with an unverified address: without one, login fails with `email_unverified` and neither `findUserCallback` nor `onSuccess` runs.
+
 Since 1.1.3, `profileEmail` is only set to an address the provider vouches for, trimmed and lowercased (Payload stores auth emails in lowercase and the default match is an exact `equals`):
 
 | Arg | Google | Microsoft |
@@ -143,7 +145,7 @@ Since 1.1.3, `profileEmail` is only set to an address the provider vouches for, 
 When there is no such address, the callback stops with `email_unverified` before `onSuccess`, before any `findUserCallback`, and before any database lookup. No flow receives `profileEmail: null`.
 
 > [!WARNING]
-> In `findUserCallback` and `onSuccess`, match, link, or create accounts with `profileEmail` (or `profileId`), never with `profile.email` or `profile.mail`. The raw `profile` is passed through untouched, so reading the email from it skips every check above.
+> In `findUserCallback` and `onSuccess`, match, link, or create accounts with `profileEmail` (or `profileId`), never with `profile.email` or `profile.mail`. The raw `profile` is passed through untouched, so reading the email from it skips every check above. The only exception is a pinned, trusted tenant: see [Example: also accept Microsoft `mail`](#example-also-accept-microsoft-mail-trusted-tenant-only).
 
 #### Microsoft tenant
 
@@ -218,6 +220,58 @@ collections: [
 ]
 ```
 
+#### Example: also accept Microsoft `mail` (trusted tenant only)
+
+This does not relax the rule above: the user still needs a verified UPN to reach the callback, and `mail` only becomes an extra lookup key decided by your app. Some directories register people in Payload by their `mail` while their UPN is different (e.g. UPN `ada@contoso.onmicrosoft.com`, `mail` `ada@contoso.com`). Since 1.1.3 those users get `not_found`. If you cannot change the Payload emails to the UPN, a `findUserCallback` can fall back to `mail`.
+
+> [!CAUTION]
+> `mail` is not verified by Microsoft: any admin of the tenant that signs in can set it to any address, including one that belongs to a user of yours. Accepting it means trusting every admin of that tenant with every account in your collection. Only do this with `tenant` pinned to a directory you control or fully trust, never with `common`, `organizations` or `consumers`. With those, anyone can create a tenant and sign in as any of your users.
+
+```ts
+payloadSimpleSocialLogin({
+  providers: {
+    microsoft: {
+      clientId: process.env.MICROSOFT_CLIENT_ID!,
+      clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+      // Required by the fallback below: only this directory can reach the callback.
+      tenant: process.env.MICROSOFT_TENANT_ID!,
+    },
+  },
+  collections: [
+    {
+      collection: 'users',
+      findUserCallback: async ({ payload, profile, profileEmail, provider }) => {
+        const findByEmail = async (email: string) => {
+          const result = await payload.find({
+            collection: 'users',
+            limit: 1,
+            overrideAccess: true,
+            where: { email: { equals: email } },
+          })
+          const user = result.docs[0]
+          return user ? { ...user } : null
+        }
+
+        // The verified UPN always wins, so `mail` can never shadow another account's UPN match.
+        const byUpn = await findByEmail(profileEmail)
+        if (byUpn || provider !== 'microsoft') return byUpn
+
+        // Safe only because `tenant` is pinned to a trusted directory.
+        const mail = typeof profile.mail === 'string' ? profile.mail.trim().toLowerCase() : ''
+        return mail ? findByEmail(mail) : null
+      },
+    },
+  ],
+})
+```
+
+Things to keep in mind:
+
+- This only helps users with a valid UPN. Guests (`#EXT#`), accounts without an email-shaped UPN and Google accounts with an unverified email stop with `email_unverified` before any `findUserCallback` runs, so a callback cannot accept them.
+- A custom `findUserCallback` owns `auth.verify`: the plugin does not check `_verified` here.
+- The callback runs for every provider of that collection. Keep the `provider` check so Google never uses this path.
+- To trust more than one directory, register one flow per tenant with [`createSocialAuthEndpoints`](#custom-endpoints) (each with its own `tenant`, `loginUrl` and `callbackURL`) instead of widening `tenant`. Graph `/me` does not tell which tenant the user came from, so the pinned `tenant` is the only check available.
+
 ### Errors
 
 OAuth callback failures redirect to the admin login form with `?ssl-error=<code>` and a toast:
@@ -228,6 +282,19 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 | `login` | Invalid/missing state, missing code, IdP error, token/profile failure | Generic “try again” |
 | `not_found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
 | `unverified` | Default findUser: collection has `auth.verify`, matched user has `_verified: false`, and `autoVerify` is not enabled | Please verify your email before logging in |
+
+`email_unverified` and `unverified` are different checks: the first is about the provider account (no verified email from Google or Microsoft), the second about the Payload user (`_verified: false` in a collection with `auth.verify`).
+
+In custom flows the same codes reach `onError` as `code` (without `onError`, the response is `{ "error": "<code>" }` with status `404` for `not_found` and `400` otherwise).
+
+Toast messages come from the `plugin-simple-social-login` i18n namespace and can be overridden in `i18n.translations`:
+
+| Code | Key | Default (`en`) |
+| --- | --- | --- |
+| `email_unverified` | `providerEmailNotVerified` | This account has no verified email address we can use. Sign in with an account whose email is verified, or ask an admin for access. |
+| `login` | `loginFailed` | Something went wrong. Please try again. |
+| `not_found` | `userNotFound` | No account found for this email. Ask an admin for access. |
+| `unverified` | `emailNotVerified` | Please verify your email before logging in. |
 
 ### Custom endpoints
 
