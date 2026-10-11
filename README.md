@@ -75,7 +75,7 @@ export default buildConfig({
 | `providers.*.callbackURL` | OAuth callback path. Default `/auth/{providerId}/callback` (public URL under `routes.api`). |
 | `providers.*.loginUrl` | Login start path (button `href` + endpoint). Default `/auth/{providerId}/login`. |
 | `providers.*.label` | Button label; falls back to plugin i18n. |
-| `providers.microsoft.tenant` | Entra tenant segment. Default `common`. |
+| `providers.microsoft.tenant` | Entra tenant segment. Default `common`. Pin a tenant ID or domain when only one directory should sign in. See [Microsoft tenant](#microsoft-tenant). |
 | `providers.*.serverURL` | Optional. Origin used to build this provider `redirect_uri` (`https://app.example.com`). String or `(req) => string \| null`. Takes precedence over the plugin `serverURL` and over `serverURL` from the Payload config. |
 | `collections` | Auth collections to resolve users for. When omitted: `[{ collection: admin.user }]` with email match. |
 | `collections[].autoVerify` | Optional. Default find only: if the collection has `auth.verify` and the user is unverified, set `_verified: true` (only that field) and continue. Default `false`. Ignored when `findUserCallback` is set. |
@@ -127,14 +127,41 @@ Return `null` or `undefined` to fall back to the next source in the chain. Regis
 
 The `Secure` flag of the OAuth `state` cookie follows the same logic: `x-forwarded-proto` first, then the resolved origin.
 
-### Finding users
+### How accounts are matched
 
-After OAuth, the plugin normalizes `profileEmail` and `profileId` and calls each collection’s `findUserCallback` (or the default email match). The first returned user is logged in (JWT cookie) and the browser is redirected to the admin panel. If none match → `/admin/login?ssl-error=not_found`.
+Since 1.1.3, `profileEmail` is only set to an address the provider vouches for, trimmed and lowercased (Payload stores auth emails in lowercase and the default match is an exact `equals`):
 
 | Arg | Google | Microsoft |
 | --- | --- | --- |
 | `profileId` | `sub` | `id` |
-| `profileEmail` | `email` | `mail ?? userPrincipalName` |
+| `profileEmail` | `email`, only when `email_verified === true` | `userPrincipalName` only; never `mail` |
+
+- **Google:** the [UserInfo endpoint](https://developers.google.com/identity/openid-connect/reference#userinfofields) returns `email_verified` as a boolean. Any other value (`false`, missing, a string, a number) means no `profileEmail`.
+- **Microsoft:** the [user principal name](https://learn.microsoft.com/graph/api/resources/user?view=graph-rest-1.0) must belong to a domain the tenant verified in DNS, and for a personal Microsoft account it is the sign-in address Microsoft verified. A missing UPN, a UPN that is not email-shaped, or a guest UPN (contains `#EXT#`, any case) means no `profileEmail`.
+- **Why `mail` is ignored:** a tenant admin can set `mail` to any address without proving they own its domain, so it does not identify a person across tenants. Microsoft's own guidance is that [apps should never use the email claim for authorization](https://learn.microsoft.com/graph/applications-authenticationbehaviors#prevent-the-issuance-of-email-claims-with-unverified-domain-owners). Users whose `mail` differs from their UPN sign in by the UPN; make sure the Payload account uses that address.
+
+When there is no such address, the callback stops with `email_unverified` before `onSuccess`, before any `findUserCallback`, and before any database lookup. No flow receives `profileEmail: null`.
+
+> [!WARNING]
+> In `findUserCallback` and `onSuccess`, match, link, or create accounts with `profileEmail` (or `profileId`), never with `profile.email` or `profile.mail`. The raw `profile` is passed through untouched, so reading the email from it skips every check above.
+
+#### Microsoft tenant
+
+The default `tenant: 'common'` stays, because accepting work, school, and personal accounts from any tenant is a legitimate use. Since matching uses only the UPN, accepting any tenant does not let one directory sign in as another directory's users.
+
+When only one directory should sign in (an internal admin panel, for example), pin it anyway:
+
+```ts
+microsoft: {
+  clientId: process.env.MICROSOFT_CLIENT_ID!,
+  clientSecret: process.env.MICROSOFT_CLIENT_SECRET!,
+  tenant: process.env.MICROSOFT_TENANT_ID!, // or 'contoso.com'
+},
+```
+
+### Finding users
+
+After OAuth, the plugin normalizes `profileEmail` and `profileId` (see [How accounts are matched](#how-accounts-are-matched)) and calls each collection’s `findUserCallback` (or the default email match). The first returned user is logged in (JWT cookie) and the browser is redirected to the admin panel. If none match → `/admin/login?ssl-error=not_found`.
 
 **Default email match and `auth.verify`.** When you omit `findUserCallback`, the plugin also checks the collection’s `auth.verify`. If verification is required and the matched user has `_verified === false`, login is denied with `ssl-error=unverified` (toast), instead of issuing a session that Payload’s JWT strategy would reject silently. Set `collections[].autoVerify: true` to update **only** `_verified` to `true` on that match and continue login. If the collection has no `auth.verify`, neither the reject nor the auto-update runs.
 
@@ -166,8 +193,6 @@ collections: [
   {
     collection: 'users',
     findUserCallback: async ({ payload, profileEmail, profileId }) => {
-      if (!profileEmail) return null
-
       const existing = await payload.find({
         collection: 'users',
         limit: 1,
@@ -199,7 +224,8 @@ OAuth callback failures redirect to the admin login form with `?ssl-error=<code>
 
 | Code | When | Toast |
 | --- | --- | --- |
-| `login` | Invalid/missing state, missing code, IdP error, token/profile failure, missing `profileEmail` | Generic “try again” |
+| `email_unverified` | The provider returned no email it vouches for (Google `email_verified` not `true`; Microsoft UPN missing, not an email, or a guest). See [How accounts are matched](#how-accounts-are-matched) | No verified email on this account |
+| `login` | Invalid/missing state, missing code, IdP error, token/profile failure | Generic “try again” |
 | `not_found` | No Payload user returned from `findUserCallback` / default email match | Account not found |
 | `unverified` | Default findUser: collection has `auth.verify`, matched user has `_verified: false`, and `autoVerify` is not enabled | Please verify your email before logging in |
 
@@ -211,7 +237,7 @@ Register the returned pair on `config.endpoints`. You do **not** need the plugin
 
 **Admin default (plugin):** pass `collections` and omit `onSuccess`. Same as `payloadSimpleSocialLogin`: find user, JWT cookie, redirect to `/admin`.
 
-**Custom flow:** pass `onSuccess` (and optional `onError`). After token exchange and IdP profile fetch, your callback returns a `Response`. No automatic Payload login. Missing `profileEmail` does **not** abort the callback (`profileEmail` may be `null`).
+**Custom flow:** pass `onSuccess` (and optional `onError`). After token exchange and IdP profile fetch, your callback returns a `Response`. No automatic Payload login. `profileEmail` is always a verified, lowercased address: when the provider gives none, `onSuccess` is not called and `onError` receives `code: 'email_unverified'` (without `onError`, the response is `400 { "error": "email_unverified" }`).
 
 The callback endpoint always clears the OAuth `state` cookie on the final response. You do not set that cookie in `onSuccess` / `onError`.
 
@@ -227,8 +253,9 @@ const google = {
   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
 }
 
-const appGoogleSuccess: SocialAuthOnSuccess = async ({ req, profile, profileEmail }) => {
+const appGoogleSuccess: SocialAuthOnSuccess = async ({ req, profileEmail, profileId }) => {
   // Your logic: find-or-create, link account, issue your own session, etc.
+  // Match by profileEmail / profileId, never by profile.email or profile.mail.
   return new Response(null, {
     headers: { Location: '/app' },
     status: 302,
@@ -270,7 +297,7 @@ Types: `CreateSocialAuthEndpointsArgs`, `SocialLoginServerURL`, `SocialAuthOnSuc
 
 ## Provider profiles
 
-After a successful OAuth callback, the plugin loads the user profile from the IdP (**not** by decoding the access token). You receive it as `profile` in `findUserCallback`, plus normalized `profileEmail` / `profileId`.
+After a successful OAuth callback, the plugin loads the user profile from the IdP (**not** by decoding the access token). You receive it as `profile` in `findUserCallback`, plus normalized `profileEmail` / `profileId`. Use `profile` for display fields only; account matching belongs to `profileEmail` / `profileId` (see [How accounts are matched](#how-accounts-are-matched)).
 
 Use the exported TypeScript types from `payload-simple-social-login/types` (`GoogleUserInfoProfile`, `MicrosoftGraphMeProfile`, `FindUserCallback`, etc.). Extra keys may appear depending on scopes / tenant; treat unknown fields as optional.
 
@@ -298,7 +325,7 @@ Typical payload (fictional):
 | Field | Notes |
 | --- | --- |
 | `sub` | Stable Google account id (preferred for long-term linking) |
-| `email` / `email_verified` | From `email` scope; good match key for existing Payload users |
+| `email` / `email_verified` | From `email` scope. `email` becomes `profileEmail` only when `email_verified` is `true` |
 | `name`, `given_name`, `family_name`, `picture` | From `profile` scope |
 | `hd` | Hosted domain for Google Workspace only; omitted for personal Gmail |
 
@@ -330,8 +357,8 @@ Typical **default** payload (fictional). Graph returns only this common subset u
 | Field | Notes |
 | --- | --- |
 | `id` | Stable Entra / MSA object id (GUID; preferred for long-term linking) |
-| `mail` | SMTP address; may be `null`. Fall back to `userPrincipalName` |
-| `userPrincipalName` | Sign-in name (often email-shaped) |
+| `mail` | SMTP address; may be `null`. Editable by tenant admins without domain proof; never used for matching |
+| `userPrincipalName` | Sign-in name in a tenant-verified domain; becomes `profileEmail` (guests with `#EXT#` excluded) |
 | `displayName`, `givenName`, `surname` | Display / name fields |
 | `businessPhones`, `jobTitle`, `mobilePhone`, `officeLocation`, `preferredLanguage` | Often empty/`null` depending on the account |
 | `@odata.context` | Graph metadata URL; ignore for matching |
@@ -346,3 +373,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 - [Google OpenID Connect: UserInfo](https://developers.google.com/identity/openid-connect/reference#userinfofields)
 - [Microsoft Graph: Get user](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0)
 - [Microsoft Graph: user resource](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0)
+- [Microsoft Graph: prevent email claims with unverified domain owners](https://learn.microsoft.com/graph/applications-authenticationbehaviors#prevent-the-issuance-of-email-claims-with-unverified-domain-owners)

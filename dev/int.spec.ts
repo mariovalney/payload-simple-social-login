@@ -1,8 +1,10 @@
-import type { Config, Payload, PayloadRequest } from 'payload'
+import type { Config, Endpoint, Payload, PayloadRequest } from 'payload'
 
 import config from '@payload-config'
 import { createPayloadRequest, getPayload } from 'payload'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
+
+import type { FindUserCallback, SocialAuthOnError, SocialAuthOnSuccess } from '../src/types.js'
 
 import { createSocialAuthEndpoints, payloadSimpleSocialLogin } from '../src/index.js'
 import { GoogleProvider } from '../src/providers/google.js'
@@ -227,7 +229,7 @@ describe('Plugin integration tests', () => {
 
   test('callback logs in matching user and redirects to admin', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'dev@payloadcms.com', sub: 'google-user-1' }
+    const profile = { email: 'dev@payloadcms.com', email_verified: true, sub: 'google-user-1' }
 
     const originalFetch = globalThis.fetch
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -285,7 +287,11 @@ describe('Plugin integration tests', () => {
 
   test('callback redirects with not_found when no Payload user matches profile email', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'unknown@example.com', sub: 'google-user-unknown' }
+    const profile = {
+      email: 'unknown@example.com',
+      email_verified: true,
+      sub: 'google-user-unknown',
+    }
 
     const originalFetch = globalThis.fetch
     globalThis.fetch = ((input: RequestInfo | URL) => {
@@ -577,35 +583,75 @@ describe('Plugin integration tests', () => {
     )
   })
 
-  test('normalizeProviderProfile maps google and microsoft fields', async () => {
+  test('normalizeProviderProfile matches microsoft accounts by userPrincipalName only', async () => {
     const { normalizeProviderProfile } = await import('../src/utils/normalizeProviderProfile.js')
+    const microsoft = (profile: Record<string, unknown>) =>
+      normalizeProviderProfile({ profile: { id: 'ms-id-1', ...profile }, provider: 'microsoft' })
 
     expect(
+      microsoft({ mail: 'grace@contoso.com', userPrincipalName: 'ada@contoso.com' }),
+    ).toEqual({ profileEmail: 'ada@contoso.com', profileId: 'ms-id-1' })
+    expect(microsoft({ mail: null, userPrincipalName: 'ada@contoso.com' }).profileEmail).toBe(
+      'ada@contoso.com',
+    )
+    expect(microsoft({ userPrincipalName: '  Ada.Lovelace@Contoso.COM ' }).profileEmail).toBe(
+      'ada.lovelace@contoso.com',
+    )
+
+    expect(microsoft({ mail: 'ada@contoso.com' }).profileEmail).toBeNull()
+    expect(microsoft({ mail: 'ada@contoso.com', userPrincipalName: null }).profileEmail).toBeNull()
+    expect(microsoft({ mail: 'ada@contoso.com', userPrincipalName: '' }).profileEmail).toBeNull()
+    expect(microsoft({ mail: 'ada@contoso.com', userPrincipalName: 'ada' }).profileEmail).toBeNull()
+    expect(
+      microsoft({ mail: 'ada@contoso.com', userPrincipalName: 'ada@contoso' }).profileEmail,
+    ).toBeNull()
+    expect(
+      microsoft({ mail: 'ada@contoso.com', userPrincipalName: '+5511999999999' }).profileEmail,
+    ).toBeNull()
+    expect(
+      microsoft({ mail: 'ada@contoso.com', userPrincipalName: 42 }).profileEmail,
+    ).toBeNull()
+    expect(
+      microsoft({
+        mail: 'ada@contoso.com',
+        userPrincipalName: 'ada_contoso.com#EXT#@fabrikam.onmicrosoft.com',
+      }).profileEmail,
+    ).toBeNull()
+    expect(
+      microsoft({
+        mail: 'ada@contoso.com',
+        userPrincipalName: 'ada_contoso.com#ext#@fabrikam.onmicrosoft.com',
+      }).profileEmail,
+    ).toBeNull()
+  })
+
+  test('normalizeProviderProfile requires email_verified === true for google', async () => {
+    const { normalizeProviderProfile } = await import('../src/utils/normalizeProviderProfile.js')
+    const google = (profile: Record<string, unknown>) =>
       normalizeProviderProfile({
-        profile: { email: 'ada@example.com', sub: 'google-sub-1' },
+        profile: { email: 'Ada@Example.com', sub: 'google-sub-1', ...profile },
         provider: 'google',
-      }),
-    ).toEqual({
+      })
+
+    expect(google({ email_verified: true })).toEqual({
       profileEmail: 'ada@example.com',
       profileId: 'google-sub-1',
     })
 
-    expect(
-      normalizeProviderProfile({
-        profile: {
-          id: 'ms-id-1',
-          mail: null,
-          userPrincipalName: 'ada@contoso.com',
-        },
-        provider: 'microsoft',
-      }),
-    ).toEqual({
-      profileEmail: 'ada@contoso.com',
-      profileId: 'ms-id-1',
-    })
+    expect(google({ email_verified: false }).profileEmail).toBeNull()
+    expect(google({}).profileEmail).toBeNull()
+    expect(google({ email_verified: undefined }).profileEmail).toBeNull()
+
+    // The UserInfo endpoint documents a boolean; the string form belongs to Tokeninfo.
+    for (const emailVerified of ['true', 'false', 'yes', 1, 0, null, {}, [true]]) {
+      expect(google({ email_verified: emailVerified }).profileEmail).toBeNull()
+    }
+
+    expect(google({ email: 'not-an-email', email_verified: true }).profileEmail).toBeNull()
+    expect(google({ email: undefined, email_verified: true }).profileEmail).toBeNull()
   })
 
-  test('callback redirects with login error when profile has no email', async () => {
+  test('callback redirects with email_unverified when profile has no email', async () => {
     const state = 'valid-oauth-state-value'
     const profile = { sub: 'google-user-no-email' }
 
@@ -641,7 +687,7 @@ describe('Plugin integration tests', () => {
       expect(endpoint).toBeDefined()
       const response = await endpoint!.handler(payloadRequest)
       expect(response.status).toBe(302)
-      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=login')
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=email_unverified')
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -649,7 +695,11 @@ describe('Plugin integration tests', () => {
 
   test('callback redirects with unverified when default findUser matches an unverified user', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'unverified@payloadcms.com', sub: 'google-user-unverified' }
+    const profile = {
+      email: 'unverified@payloadcms.com',
+      email_verified: true,
+      sub: 'google-user-unverified',
+    }
 
     const noAutoVerifyConfig = payloadSimpleSocialLogin({
       collections: [
@@ -732,7 +782,7 @@ describe('Plugin integration tests', () => {
     }
 
     const state = 'valid-oauth-state-value'
-    const profile = { email, sub: 'google-user-autoverify' }
+    const profile = { email, email_verified: true, sub: 'google-user-autoverify' }
 
     const autoVerifyConfig = payloadSimpleSocialLogin({
       collections: [
@@ -804,16 +854,13 @@ describe('Plugin integration tests', () => {
 
   test('custom findUserCallback can allow or deny login', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'dev@payloadcms.com', sub: 'google-user-custom' }
+    const profile = { email: 'dev@payloadcms.com', email_verified: true, sub: 'google-user-custom' }
 
     const allowConfig = payloadSimpleSocialLogin({
       collections: [
         {
           collection: 'users',
           findUserCallback: async ({ payload: p, profileEmail }) => {
-            if (!profileEmail) {
-              return null
-            }
             const result = await p.find({
               collection: 'users',
               limit: 1,
@@ -895,16 +942,17 @@ describe('Plugin integration tests', () => {
 
   test('custom findUserCallback is not blocked by auth.verify', async () => {
     const state = 'valid-oauth-state-value'
-    const profile = { email: 'unverified@payloadcms.com', sub: 'google-user-custom-unverified' }
+    const profile = {
+      email: 'unverified@payloadcms.com',
+      email_verified: true,
+      sub: 'google-user-custom-unverified',
+    }
 
     const customConfig = payloadSimpleSocialLogin({
       collections: [
         {
           collection: 'users',
           findUserCallback: async ({ payload: p, profileEmail }) => {
-            if (!profileEmail) {
-              return null
-            }
             const result = await p.find({
               collection: 'users',
               limit: 1,
@@ -965,80 +1013,6 @@ describe('Plugin integration tests', () => {
       expect(
         cookies.some((cookie) => cookie?.includes('payload-token=') || cookie?.includes('-token=')),
       ).toBe(true)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
-  })
-
-  test('custom onSuccess receives profile without email and does not issue Payload session', async () => {
-    const state = 'valid-oauth-state-value'
-    const profile = { sub: 'google-user-no-email-custom' }
-    const appStateCookie = getOAuthStateCookieName({
-      callbackURL: '/app/google/callback',
-      providerId: 'google',
-    })
-
-    const customConfig = {
-      admin: { user: 'users' },
-      collections: [],
-      endpoints: createSocialAuthEndpoints({
-        ...dummyGoogle,
-        callbackURL: '/app/google/callback',
-        loginUrl: '/app/google/login',
-        onSuccess: ({ profileEmail, profileId }) =>
-          Response.json({ profileEmail, profileId }),
-        provider: 'google',
-      }),
-      secret: 'test',
-    } as unknown as Config
-
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = ((input: RequestInfo | URL) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      if (url.includes('oauth2.googleapis.com/token')) {
-        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
-      }
-      if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
-        return Promise.resolve(Response.json(profile))
-      }
-      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
-    }) as typeof fetch
-
-    try {
-      const request = new Request(
-        `http://localhost:3000/api/app/google/callback?state=${state}&code=auth-code`,
-        {
-          headers: {
-            Cookie: `${appStateCookie}=${state}`,
-          },
-          method: 'GET',
-        },
-      )
-
-      const endpoint = customConfig.endpoints?.find(
-        (item) => item.path === '/app/google/callback' && item.method === 'get',
-      )
-      expect(endpoint).toBeDefined()
-
-      const payloadRequest = await createPayloadRequest({ config, request })
-      const response = await endpoint!.handler(payloadRequest)
-      expect(response.status).toBe(200)
-      await expect(response.json()).resolves.toEqual({
-        profileEmail: null,
-        profileId: 'google-user-no-email-custom',
-      })
-
-      const cookies =
-        typeof response.headers.getSetCookie === 'function'
-          ? response.headers.getSetCookie()
-          : [response.headers.get('set-cookie')].filter(Boolean)
-
-      expect(cookies.some((cookie) => cookie?.includes(`${appStateCookie}=`))).toBe(true)
-      expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
-      expect(
-        cookies.some((cookie) => cookie?.includes('payload-token=') || cookie?.includes('-token=')),
-      ).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -1153,6 +1127,283 @@ describe('Plugin integration tests', () => {
 
     expect(cookies.some((cookie) => cookie?.includes(`${appStateCookie}=`))).toBe(true)
     expect(cookies.some((cookie) => cookie?.match(/Max-Age=0|Expires=/i))).toBe(true)
+  })
+})
+
+describe('callback account matching', () => {
+  const state = 'valid-oauth-state-value'
+  const dummyMicrosoft = {
+    clientId: 'test-microsoft-client-id',
+    clientSecret: 'test-microsoft-client-secret',
+  }
+  const microsoftDefaultStateCookie = getOAuthStateCookieName({
+    callbackURL: '/auth/microsoft/callback',
+    providerId: 'microsoft',
+  })
+
+  const mockIdp = ({
+    google,
+    microsoft,
+  }: {
+    google?: Record<string, unknown>
+    microsoft?: Record<string, unknown>
+  }) => {
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = ((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
+      }
+      if (google && url.includes('openidconnect.googleapis.com/v1/userinfo')) {
+        return Promise.resolve(Response.json(google))
+      }
+      if (url.includes('login.microsoftonline.com') && url.includes('/token')) {
+        return Promise.resolve(Response.json({ access_token: 'ms-access-token' }))
+      }
+      if (microsoft && url.includes('graph.microsoft.com/v1.0/me')) {
+        return Promise.resolve(Response.json(microsoft))
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`))
+    }) as typeof fetch
+
+    return () => {
+      globalThis.fetch = originalFetch
+    }
+  }
+
+  const callbackRequest = ({ cookieName, path }: { cookieName: string; path: string }) =>
+    createPayloadRequest({
+      config,
+      request: new Request(`http://localhost:3000/api${path}?state=${state}&code=auth-code`, {
+        headers: { Cookie: `${cookieName}=${state}` },
+        method: 'GET',
+      }),
+    })
+
+  const findCallback = (endpoints: Endpoint[] | undefined, path: string) => {
+    const endpoint = endpoints?.find((item) => item.path === path && item.method === 'get')
+    expect(endpoint).toBeDefined()
+    return endpoint!
+  }
+
+  const getCookies = (response: Response) =>
+    typeof response.headers.getSetCookie === 'function'
+      ? response.headers.getSetCookie()
+      : [response.headers.get('set-cookie') ?? '']
+
+  const hasAuthCookie = (response: Response) =>
+    getCookies(response).some((cookie) => cookie.includes('payload-token='))
+
+  test('admin flow stops with email_unverified before the default user lookup', async () => {
+    const restore = mockIdp({
+      google: { email: 'dev@payloadcms.com', email_verified: false, sub: 'google-unverified' },
+    })
+
+    const req = await callbackRequest({
+      cookieName: googleDefaultStateCookie,
+      path: '/auth/google/callback',
+    })
+    const findSpy = vi.spyOn(req.payload, 'find')
+
+    try {
+      const response = await findCallback(payload.config.endpoints, '/auth/google/callback').handler(
+        req,
+      )
+
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=email_unverified')
+      expect(findSpy).not.toHaveBeenCalled()
+      expect(hasAuthCookie(response)).toBe(false)
+      expect(getCookies(response).some((cookie) => cookie.includes(`${googleDefaultStateCookie}=`))).toBe(
+        true,
+      )
+    } finally {
+      findSpy.mockRestore()
+      restore()
+    }
+  })
+
+  test('admin flow never calls findUserCallback without a usable microsoft UPN', async () => {
+    const findUserCallback = vi.fn<FindUserCallback>(() => Promise.resolve({ id: 1 }))
+    const endpoints = createSocialAuthEndpoints({
+      ...dummyMicrosoft,
+      collections: [{ collection: 'users', findUserCallback }],
+      provider: 'microsoft',
+    })
+
+    const profiles = [
+      { id: 'ms-no-upn', mail: 'dev@payloadcms.com' },
+      {
+        id: 'ms-guest',
+        mail: 'dev@payloadcms.com',
+        userPrincipalName: 'dev_payloadcms.com#EXT#@fabrikam.onmicrosoft.com',
+      },
+    ]
+
+    for (const profile of profiles) {
+      const restore = mockIdp({ microsoft: profile })
+      try {
+        const req = await callbackRequest({
+          cookieName: microsoftDefaultStateCookie,
+          path: '/auth/microsoft/callback',
+        })
+        const response = await findCallback(endpoints, '/auth/microsoft/callback').handler(req)
+
+        expect(response.status).toBe(302)
+        expect(response.headers.get('location')).toBe('/admin/login?ssl-error=email_unverified')
+        expect(hasAuthCookie(response)).toBe(false)
+      } finally {
+        restore()
+      }
+    }
+
+    expect(findUserCallback).not.toHaveBeenCalled()
+  })
+
+  test('admin flow matches microsoft users by UPN and ignores mail', async () => {
+    const endpoints = createSocialAuthEndpoints({
+      ...dummyMicrosoft,
+      collections: [{ collection: 'users' }],
+      provider: 'microsoft',
+    })
+    const endpoint = findCallback(endpoints, '/auth/microsoft/callback')
+
+    const restoreUpn = mockIdp({
+      microsoft: {
+        id: 'ms-dev',
+        mail: 'someone-else@fabrikam.com',
+        userPrincipalName: 'DEV@payloadcms.com',
+      },
+    })
+    try {
+      const response = await endpoint.handler(
+        await callbackRequest({
+          cookieName: microsoftDefaultStateCookie,
+          path: '/auth/microsoft/callback',
+        }),
+      )
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin')
+      expect(hasAuthCookie(response)).toBe(true)
+    } finally {
+      restoreUpn()
+    }
+
+    const restoreMail = mockIdp({
+      microsoft: {
+        id: 'ms-other',
+        mail: 'dev@payloadcms.com',
+        userPrincipalName: 'mallory@fabrikam.onmicrosoft.com',
+      },
+    })
+    try {
+      const response = await endpoint.handler(
+        await callbackRequest({
+          cookieName: microsoftDefaultStateCookie,
+          path: '/auth/microsoft/callback',
+        }),
+      )
+      expect(response.status).toBe(302)
+      expect(response.headers.get('location')).toBe('/admin/login?ssl-error=not_found')
+      expect(hasAuthCookie(response)).toBe(false)
+    } finally {
+      restoreMail()
+    }
+  })
+
+  test('custom flow does not call onSuccess without a verified email', async () => {
+    const callbackURL = '/app/google/callback'
+    const cookieName = getOAuthStateCookieName({ callbackURL, providerId: 'google' })
+    const onSuccess = vi.fn<SocialAuthOnSuccess>(() => Response.json({ ok: true }))
+    const onError = vi.fn<SocialAuthOnError>(
+      () => new Response(null, { headers: { Location: '/app/login?error=oauth' }, status: 302 }),
+    )
+
+    const withOnError = createSocialAuthEndpoints({
+      ...dummyGoogle,
+      callbackURL,
+      loginUrl: '/app/google/login',
+      onError,
+      onSuccess,
+      provider: 'google',
+    })
+    const withoutOnError = createSocialAuthEndpoints({
+      ...dummyGoogle,
+      callbackURL,
+      loginUrl: '/app/google/login',
+      onSuccess,
+      provider: 'google',
+    })
+
+    const restore = mockIdp({
+      google: { email: 'dev@payloadcms.com', sub: 'google-no-email-verified' },
+    })
+
+    try {
+      const handled = await findCallback(withOnError, callbackURL).handler(
+        await callbackRequest({ cookieName, path: callbackURL }),
+      )
+      expect(handled.status).toBe(302)
+      expect(handled.headers.get('location')).toBe('/app/login?error=oauth')
+      expect(onError).toHaveBeenCalledTimes(1)
+      expect(onError.mock.calls[0]?.[0]).toMatchObject({ code: 'email_unverified' })
+      expect(getCookies(handled).some((cookie) => cookie.includes(`${cookieName}=`))).toBe(true)
+
+      const fallback = await findCallback(withoutOnError, callbackURL).handler(
+        await callbackRequest({ cookieName, path: callbackURL }),
+      )
+      expect(fallback.status).toBe(400)
+      await expect(fallback.json()).resolves.toEqual({ error: 'email_unverified' })
+      expect(hasAuthCookie(fallback)).toBe(false)
+    } finally {
+      restore()
+    }
+
+    expect(onSuccess).not.toHaveBeenCalled()
+  })
+
+  test('custom flow does not pass microsoft mail to onSuccess', async () => {
+    const callbackURL = '/app/microsoft/callback'
+    const cookieName = getOAuthStateCookieName({ callbackURL, providerId: 'microsoft' })
+    const onSuccess = vi.fn<SocialAuthOnSuccess>(({ profileEmail }) =>
+      Response.json({ profileEmail }),
+    )
+
+    const endpoints = createSocialAuthEndpoints({
+      ...dummyMicrosoft,
+      callbackURL,
+      loginUrl: '/app/microsoft/login',
+      onSuccess,
+      provider: 'microsoft',
+    })
+    const endpoint = findCallback(endpoints, callbackURL)
+
+    const restoreMailOnly = mockIdp({ microsoft: { id: 'ms-mail-only', mail: 'dev@payloadcms.com' } })
+    try {
+      const response = await endpoint.handler(await callbackRequest({ cookieName, path: callbackURL }))
+      expect(response.status).toBe(400)
+      await expect(response.json()).resolves.toEqual({ error: 'email_unverified' })
+      expect(onSuccess).not.toHaveBeenCalled()
+    } finally {
+      restoreMailOnly()
+    }
+
+    const restoreUpn = mockIdp({
+      microsoft: {
+        id: 'ms-upn',
+        mail: 'dev@payloadcms.com',
+        userPrincipalName: 'Ada@Contoso.com',
+      },
+    })
+    try {
+      const response = await endpoint.handler(await callbackRequest({ cookieName, path: callbackURL }))
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toEqual({ profileEmail: 'ada@contoso.com' })
+      expect(onSuccess).toHaveBeenCalledTimes(1)
+    } finally {
+      restoreUpn()
+    }
   })
 })
 
@@ -1373,7 +1624,9 @@ describe('resolveAbsoluteCallbackUrl', () => {
         return Promise.resolve(Response.json({ access_token: 'google-access-token' }))
       }
       if (url.includes('openidconnect.googleapis.com/v1/userinfo')) {
-        return Promise.resolve(Response.json({ email: 'ada@example.com', sub: 'google-sub' }))
+        return Promise.resolve(
+          Response.json({ email: 'ada@example.com', email_verified: true, sub: 'google-sub' }),
+        )
       }
       return Promise.reject(new Error(`Unexpected fetch: ${url}`))
     }) as typeof fetch

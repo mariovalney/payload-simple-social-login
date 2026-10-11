@@ -58,6 +58,10 @@ export type MicrosoftProviderSpecific = {
    * - `organizations`: work/school accounts only
    * - `consumers`: personal Microsoft accounts only
    * - A tenant ID or domain: restrict to that directory
+   *
+   * Accounts are matched by `userPrincipalName` only, so accepting any tenant does not let one
+   * directory claim another directory's users. Still, pin a tenant ID or domain when only one
+   * directory should sign in (e.g. the admin panel).
    * @default `common`
    */
   tenant?: string
@@ -87,13 +91,13 @@ export type SocialProviderId = 'google' | 'microsoft'
  * }
  * ```
  *
- * For matching a Payload user, prefer `email` (and optionally `email_verified`) plus
- * stable IdP id `sub`.
+ * The plugin matches Payload users by `email` only when `email_verified === true`
+ * (see {@link FindUserCallbackArgs.profileEmail}). Prefer `sub` for long-term linking.
  */
 export type GoogleUserInfoProfile = {
   /** User email address (requires `email` scope). */
   email?: string
-  /** Whether Google has verified the email address. */
+  /** Whether Google has verified the email address (boolean on the UserInfo endpoint). */
   email_verified?: boolean
   /** Surname / last name (requires `profile` scope). */
   family_name?: string
@@ -142,8 +146,8 @@ export type GoogleUserInfoProfile = {
  * }
  * ```
  *
- * For matching a Payload user, prefer `mail` (fallback `userPrincipalName` when
- * `mail` is null) plus stable IdP id `id`.
+ * The plugin matches Payload users by `userPrincipalName` only and never by `mail`
+ * (see {@link FindUserCallbackArgs.profileEmail}). Prefer `id` for long-term linking.
  */
 export type MicrosoftGraphMeProfile = {
   /** OData metadata URL; present on Graph JSON responses. */
@@ -162,8 +166,8 @@ export type MicrosoftGraphMeProfile = {
   /** Job title. */
   jobTitle?: null | string
   /**
-   * SMTP email address. May be `null` for some personal or incomplete accounts;
-   * then use `userPrincipalName`.
+   * SMTP email address. May be `null`. Tenant admins can set it to any address without
+   * proving domain ownership, so never use it to match or authorize accounts.
    */
   mail?: null | string
   /** Mobile phone number. */
@@ -175,8 +179,8 @@ export type MicrosoftGraphMeProfile = {
   /** Last / family name. */
   surname?: null | string
   /**
-   * User principal name (sign-in name), often `user@tenant.onmicrosoft.com` or
-   * a verified email domain.
+   * User principal name (sign-in name). Its domain must be one the tenant verified
+   * (e.g. `user@contoso.com` or `user@tenant.onmicrosoft.com`); guests carry `#EXT#`.
    */
   userPrincipalName?: null | string
 }
@@ -197,13 +201,17 @@ export type FindUserCallbackArgs = {
    * Raw IdP profile from UserInfo (Google) or Graph `/me` (Microsoft).
    * Narrow with `provider`, or cast to {@link GoogleUserInfoProfile} /
    * {@link MicrosoftGraphMeProfile}. See those types for fields and docs links.
+   *
+   * Never match or create accounts from `profile.email` or `profile.mail`: use `profileEmail`.
    */
   profile: Record<string, unknown>
   /**
-   * Normalized email from the IdP profile, or `null` if missing.
-   * Google: `email`. Microsoft: `mail ?? userPrincipalName`.
+   * Lowercased email the provider vouches for. Always set: when the provider gives none, the
+   * callback stops with `email_unverified` before any user lookup.
+   * Google: `email` when `email_verified === true`. Microsoft: `userPrincipalName`
+   * (never `mail`; guest `#EXT#` and non-email UPNs are rejected).
    */
-  profileEmail: null | string
+  profileEmail: string
   /**
    * Stable IdP subject / object id, or `null` if missing.
    * Google: `sub`. Microsoft: `id`.
@@ -244,12 +252,21 @@ export type CollectionSocialLoginConfig = {
   findUserCallback?: FindUserCallback
 }
 
-export type SocialAuthErrorCode = 'login' | 'not_found' | 'unverified'
+/**
+ * - `email_unverified`: the provider returned no email it vouches for (see
+ *   {@link FindUserCallbackArgs.profileEmail})
+ * - `login`: invalid state, IdP error, token/profile failure, or an exception
+ * - `not_found`: no Payload user matched
+ * - `unverified`: the matched Payload user has `_verified: false` (default find only)
+ */
+export type SocialAuthErrorCode = 'email_unverified' | 'login' | 'not_found' | 'unverified'
 
 export type SocialAuthOnSuccessArgs = {
   accessToken: string
+  /** Raw IdP profile. Never match accounts by `profile.email` / `profile.mail`. */
   profile: Record<string, unknown>
-  profileEmail: null | string
+  /** Same rule as {@link FindUserCallbackArgs.profileEmail}; always set. */
+  profileEmail: string
   profileId: null | string
   provider: SocialProviderId
   req: PayloadRequest

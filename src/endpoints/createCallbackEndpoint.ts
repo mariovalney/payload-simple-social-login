@@ -85,18 +85,14 @@ const resolveUserFromCollections = async ({
   for (const entry of collections) {
     const findUser =
       entry.findUserCallback ??
-      (async ({ payload, profileEmail: email }) => {
-        if (!email) {
-          return null
-        }
-        return defaultFindUserByEmail({
+      (({ payload, profileEmail: email }) =>
+        defaultFindUserByEmail({
           autoVerify: entry.autoVerify === true,
           collection: entry.collection,
           payload,
           profileEmail: email,
           req,
-        })
-      })
+        }))
 
     const user = await findUser({
       payload,
@@ -272,6 +268,17 @@ export const createCallbackEndpoint = ({
         provider: provider.id,
       })
 
+      // No flow may continue, or look up a user, without an email the provider vouches for.
+      if (!profileEmail) {
+        return handleCallbackError({
+          clearCookie,
+          code: 'email_unverified',
+          onError,
+          onSuccess,
+          req,
+        })
+      }
+
       if (onSuccess) {
         try {
           const response = await onSuccess({
@@ -296,16 +303,6 @@ export const createCallbackEndpoint = ({
       }
 
       if (!collections?.length) {
-        return handleCallbackError({
-          clearCookie,
-          code: 'login',
-          onError,
-          onSuccess,
-          req,
-        })
-      }
-
-      if (!profileEmail) {
         return handleCallbackError({
           clearCookie,
           code: 'login',

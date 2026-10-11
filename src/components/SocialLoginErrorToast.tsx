@@ -8,6 +8,7 @@ import type { PluginTranslationKeys, PluginTranslationsObject } from '../transla
 const SSL_ERROR_QUERY = 'ssl-error'
 
 const ERROR_I18N_KEYS = {
+  email_unverified: 'plugin-simple-social-login:providerEmailNotVerified',
   login: 'plugin-simple-social-login:loginFailed',
   not_found: 'plugin-simple-social-login:userNotFound',
   unverified: 'plugin-simple-social-login:emailNotVerified',
