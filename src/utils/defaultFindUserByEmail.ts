@@ -3,6 +3,7 @@ import type { CollectionSlug, Payload, PayloadRequest } from 'payload'
 import type { SocialLoginUser } from '../types.js'
 
 import { UnverifiedSocialUserError } from '../errors/UnverifiedSocialUserError.js'
+import { normalizeEmail } from './normalizeProviderProfile.js'
 
 export const defaultFindUserByEmail = async ({
   autoVerify = false,
@@ -17,13 +18,18 @@ export const defaultFindUserByEmail = async ({
   profileEmail: string
   req?: PayloadRequest
 }): Promise<null | SocialLoginUser> => {
+  const email = normalizeEmail(profileEmail)
+  if (!email) {
+    return null
+  }
+
   const result = await payload.find({
     collection,
     limit: 1,
     overrideAccess: true,
     where: {
       email: {
-        equals: profileEmail,
+        equals: email,
       },
     },
     ...(req ? { req } : {}),

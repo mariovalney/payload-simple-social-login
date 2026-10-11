@@ -21,6 +21,8 @@ export const translations = {
       emailNotVerified: 'Please verify your email before logging in.',
       loginFailed: 'Something went wrong. Please try again.',
       orLoginWith: 'or login with',
+      providerEmailNotVerified:
+        'This account has no verified email address we can use. Sign in with an account whose email is verified, or ask an admin for access.',
       providers: {
         google: 'Google',
         microsoft: 'Microsoft',
@@ -33,6 +35,8 @@ export const translations = {
       emailNotVerified: 'Verifique seu e-mail antes de entrar.',
       loginFailed: 'Algo deu errado. Tente novamente.',
       orLoginWith: 'ou entre com',
+      providerEmailNotVerified:
+        'Esta conta não tem um e-mail verificado que possamos usar. Entre com uma conta de e-mail verificado ou peça acesso a um administrador.',
       providers: {
         google: 'Google',
         microsoft: 'Microsoft',
@@ -49,6 +53,7 @@ export type PluginTranslationKeys =
   | 'plugin-simple-social-login:emailNotVerified'
   | 'plugin-simple-social-login:loginFailed'
   | 'plugin-simple-social-login:orLoginWith'
+  | 'plugin-simple-social-login:providerEmailNotVerified'
   | 'plugin-simple-social-login:providers:google'
   | 'plugin-simple-social-login:providers:microsoft'
   | 'plugin-simple-social-login:userNotFound'
